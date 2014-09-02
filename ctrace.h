@@ -64,6 +64,8 @@ CTrace::CommonInit ()
                + (static_cast<uint64_t> (ts.tv_nsec)
                   / CTrace::kNanosecondsPerMicrosecond);
     }
+  timespec nano_100 = { 0, 100 };
+  nanosleep (&nano_100, NULL);
 }
 
 inline void
