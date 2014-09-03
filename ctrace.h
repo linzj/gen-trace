@@ -101,6 +101,7 @@ CTrace::Submit (const CTrace *This)
   static FileSink fsink;
   static bool needComma = false;
   uint64_t dur;
+  uint64_t &current = GetCurrentTime ();
 
   if (!isInit)
     {
@@ -123,6 +124,8 @@ CTrace::Submit (const CTrace *This)
              * CTrace::kMicrosecondsPerSecond)
             + (static_cast<uint64_t> (ts.tv_nsec)
                / CTrace::kNanosecondsPerMicrosecond);
+      if (now <= current)
+        now = current + 1;
     }
 
   if (now <= This->clock_)
@@ -141,7 +144,6 @@ CTrace::Submit (const CTrace *This)
   fprintf (f, "{\"cat\":\"%s\", \"pid\":%d, \"tid\":%d, \"ts\":%lu, "
               "\"ph\":\"X\", \"name\":\"%s\", \"dur\": %lu}",
            This->cat_, This->pid_, This->tid_, This->clock_, This->name_, dur);
-  uint64_t &current = GetCurrentTime ();
   current = This->clock_ + dur;
 }
 
