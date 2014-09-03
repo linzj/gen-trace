@@ -20,6 +20,7 @@ public:
   int pid_;
   int tid_;
   uint64_t clock_;
+  uint64_t clock_real_;
   static const int64_t kMillisecondsPerSecond = 1000;
   static const int64_t kMicrosecondsPerMillisecond = 1000;
   static const int64_t kMicrosecondsPerSecond = kMicrosecondsPerMillisecond
@@ -65,6 +66,7 @@ CTrace::CommonInit ()
                 * CTrace::kMicrosecondsPerSecond)
                + (static_cast<uint64_t> (ts.tv_nsec)
                   / CTrace::kNanosecondsPerMicrosecond);
+      clock_real_ = clock_;
     }
   uint64_t &current = GetCurrentTime ();
 
@@ -100,7 +102,7 @@ CTrace::Submit (const CTrace *This)
   };
   static FileSink fsink;
   static bool needComma = false;
-  uint64_t dur;
+  uint64_t dur, now;
   uint64_t &current = GetCurrentTime ();
 
   if (!isInit)
@@ -112,7 +114,6 @@ CTrace::Submit (const CTrace *This)
       fsink.f_ = f;
       isInit = true;
     }
-  uint64_t now;
   timespec ts;
   if (clock_gettime (CLOCK_MONOTONIC, &ts) != 0)
     {
@@ -124,14 +125,17 @@ CTrace::Submit (const CTrace *This)
              * CTrace::kMicrosecondsPerSecond)
             + (static_cast<uint64_t> (ts.tv_nsec)
                / CTrace::kNanosecondsPerMicrosecond);
-      if (now <= current)
-        now = current + 1;
     }
 
-  if (now <= This->clock_)
+  if (now <= This->clock_real_)
     dur = 1;
   else
-    dur = now - This->clock_;
+    dur = now - This->clock_real_;
+
+  if (dur + This->clock_ < current)
+    {
+      dur = current - This->clock_;
+    }
 
   if (!needComma)
     {
