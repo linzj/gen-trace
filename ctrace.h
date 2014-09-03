@@ -15,8 +15,6 @@ public:
 
   void CommonInit ();
 
-  static void submit (const CTrace *);
-
   const char *cat_;
   const char *name_;
   int pid_;
@@ -33,6 +31,10 @@ public:
   static const int64_t kNanosecondsPerMicrosecond = 1000;
   static const int64_t kNanosecondsPerSecond = kNanosecondsPerMicrosecond
                                                * kMicrosecondsPerSecond;
+
+private:
+  static void Submit (const CTrace *);
+  static uint64_t &GetCurrentTime ();
 };
 
 #define C_TRACE_0(cat, name) CTrace __trace__ (cat, name)
@@ -44,7 +46,7 @@ inline CTrace::CTrace (const char *cat, const char *name)
   CommonInit ();
 }
 
-inline CTrace::~CTrace () { submit (this); }
+inline CTrace::~CTrace () { Submit (this); }
 
 inline void
 CTrace::CommonInit ()
@@ -64,12 +66,22 @@ CTrace::CommonInit ()
                + (static_cast<uint64_t> (ts.tv_nsec)
                   / CTrace::kNanosecondsPerMicrosecond);
     }
-  timespec nano_100 = { 0, 0 };
-  nanosleep (&nano_100, NULL);
+  uint64_t &current = GetCurrentTime ();
+
+  if (this->clock_ <= current)
+    this->clock_ = current + 1;
+  current = this->clock_;
+}
+
+inline uint64_t &
+CTrace::GetCurrentTime ()
+{
+  static uint64_t current = 0;
+  return current;
 }
 
 inline void
-CTrace::submit (const CTrace *This)
+CTrace::Submit (const CTrace *This)
 {
   static FILE *f;
   static bool isInit = false;
@@ -88,6 +100,7 @@ CTrace::submit (const CTrace *This)
   };
   static FileSink fsink;
   static bool needComma = false;
+  uint64_t dur;
 
   if (!isInit)
     {
@@ -111,7 +124,12 @@ CTrace::submit (const CTrace *This)
             + (static_cast<uint64_t> (ts.tv_nsec)
                / CTrace::kNanosecondsPerMicrosecond);
     }
-  uint64_t dur = now - This->clock_;
+
+  if (now <= This->clock_)
+    dur = 1;
+  else
+    dur = now - This->clock_;
+
   if (!needComma)
     {
       needComma = true;
@@ -120,9 +138,11 @@ CTrace::submit (const CTrace *This)
     {
       fprintf (f, ", ");
     }
-  fprintf (f, "{\"cat\":\"%s\", \"pid\":%d, \"tid\":%d, \"ts\":%lld, "
-              "\"ph\":\"X\", \"name\":\"%s\", \"dur\": \"%lld\"}",
+  fprintf (f, "{\"cat\":\"%s\", \"pid\":%d, \"tid\":%d, \"ts\":%lu, "
+              "\"ph\":\"X\", \"name\":\"%s\", \"dur\": %lu}",
            This->cat_, This->pid_, This->tid_, This->clock_, This->name_, dur);
+  uint64_t &current = GetCurrentTime ();
+  current = This->clock_ + dur;
 }
 
 #endif /* CTRACE_H */
