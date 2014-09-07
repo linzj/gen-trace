@@ -9,9 +9,21 @@
 #include "function.h"
 #include "gimple-expr.h"
 
+#include "langhooks.h"
+#include "timevar.h"
+#include "dumpfile.h"
+#include "target.h"
+#include "df.h"
+#include "tree-ssa-alias.h"
+#include "pointer-set.h"
+#include "internal-fn.h"
+#include "is-a.h"
+#include "gimple.h"
+#include "gimple-ssa.h"
+
 static struct pass_data mypass = {
   GIMPLE_PASS,              /* type */
-  "gen_trace",                 /* name */
+  "gen_trace",              /* name */
   OPTGROUP_NONE,            /* optinfo_flags */
   false,                    /* has_gate */
   true,                     /* has_execute */
@@ -28,7 +40,15 @@ int plugin_is_GPL_compatible;
 static unsigned int
 execute_trace ()
 {
-  dump_function_to_file (current_function_decl, stderr, TDF_TREE | TDF_BLOCKS | TDF_VERBOSE);
+  gimple_seq body, cleanup;
+  gimple_statement_try *gtry;
+
+  body = gimple_body (current_function_decl);
+  cleanup = NULL;
+  gtry = gimple_build_try (body, cleanup, GIMPLE_TRY_FINALLY);
+  gimple_set_body (current_function_decl, gtry);
+  dump_function_to_file (current_function_decl, stderr,
+                         TDF_TREE | TDF_BLOCKS | TDF_VERBOSE);
   exit (0);
 }
 
