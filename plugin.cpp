@@ -108,10 +108,10 @@ make_fname_decl ()
 static unsigned int
 execute_trace ()
 {
-  gimple_seq body, body_bind_body, cleanup;
-  gimple_statement_try *gtry;
+  gimple_seq body, body_bind_body, inner_cleanup, outer_cleanup;
+  gimple inner_try, outer_try;
   tree record_type, func_start_decl, func_end_decl, var_decl,
-      function_name_decl;
+      function_name_decl, constructor_clobber;
   gimple call_func_start;
   gimple_stmt_iterator gsi;
 
@@ -130,31 +130,35 @@ execute_trace ()
   // mimic __FUNCTION__ builtin.
   function_name_decl = make_fname_decl ();
   declare_vars (function_name_decl, body, false);
-  // add calls to body
-  body_bind_body = gimple_bind_body (body);
+  // construct inner try
+  // init calls
   call_func_start = gimple_build_call (
       func_start_decl, 2,
       build1 (ADDR_EXPR, build_pointer_type (record_type), var_decl),
       build1 (ADDR_EXPR, build_pointer_type (TREE_TYPE (function_name_decl)),
               function_name_decl));
-  gsi = gsi_start (body_bind_body);
-  gsi_insert_before (&gsi, call_func_start, GSI_NEW_STMT);
-  // make clean up
-  cleanup = gimple_build_call (
+  // make inner clean up
+  inner_cleanup = gimple_build_call (
       func_end_decl, 2,
       build1 (ADDR_EXPR, build_pointer_type (record_type), var_decl),
       build1 (ADDR_EXPR, build_pointer_type (TREE_TYPE (function_name_decl)),
               function_name_decl));
-  gtry = gimple_build_try (body_bind_body, cleanup, GIMPLE_TRY_FINALLY);
-  gimple_bind_set_body (body, gtry);
-  // TODO:
-  // make to:
-  // try {
-  // ...
-  // }
-  // finally {
-  //  __ctrace_var__ = {clobber};
-  // }
+  // update inner try
+  body_bind_body = gimple_bind_body (body);
+  inner_try
+      = gimple_build_try (body_bind_body, inner_cleanup, GIMPLE_TRY_FINALLY);
+  gsi = gsi_start (inner_try);
+  gsi_insert_before (&gsi, call_func_start, GSI_NEW_STMT);
+  // construct outer try
+  constructor_clobber = make_node (CONSTRUCTOR);
+  TREE_THIS_VOLATILE (constructor_clobber) = 1;
+  TREE_TYPE (constructor_clobber) = TREE_TYPE (var_decl);
+  outer_cleanup = gimple_build_assign (var_decl, constructor_clobber);
+  // update outer try
+  outer_try
+      = gimple_build_try (call_func_start, outer_cleanup, GIMPLE_TRY_FINALLY);
+  // update body bind body
+  gimple_bind_set_body (body, outer_try);
   dump_function_to_file (current_function_decl, stderr,
                          TDF_TREE | TDF_BLOCKS | TDF_VERBOSE);
   // exit (0);
