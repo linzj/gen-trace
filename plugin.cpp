@@ -52,9 +52,9 @@ build_type ()
   TYPE_FIELDS (ret_type) = field_decl;
   TYPE_SIZE_UNIT (ret_type) = build_int_cst (integer_type_node, 16);
   TYPE_NAME (ret_type) = get_identifier ("__CtraceStruct__");
-  fprintf (stderr, "begin print built type:\n");
-  print_node (stderr, "LINZJ", ret_type, 0);
-  fprintf (stderr, "end print built type:\n");
+  fprintf (dump_file, "begin print built type:\n");
+  print_node (dump_file, "LINZJ", ret_type, 0);
+  fprintf (dump_file, "end print built type:\n");
   return ret_type;
 }
 
@@ -68,9 +68,9 @@ build_function_decl (const char *name, tree param_type)
       build_pointer_type (char_type_node), NULL_TREE);
   func_decl = build_decl (UNKNOWN_LOCATION, FUNCTION_DECL,
                           get_identifier (name), function_type_list);
-  fprintf (stderr, "begin print built function type %s:\n", name);
-  print_node (stderr, "LINZJ", func_decl, 0);
-  fprintf (stderr, "end print built function type %s:\n", name);
+  fprintf (dump_file, "begin print built function type %s:\n", name);
+  print_node (dump_file, "LINZJ", func_decl, 0);
+  fprintf (dump_file, "end print built function type %s:\n", name);
   TREE_USED (func_decl) = 1;
 
   return func_decl;
@@ -79,7 +79,7 @@ build_function_decl (const char *name, tree param_type)
 static tree
 make_fname_decl ()
 {
-  const char *name = lang_hooks.decl_printable_name (current_function_decl, 2);
+  const char *name = lang_hooks.decl_printable_name (current_function_decl, 0);
   tree decl, type, init;
   size_t length = strlen (name);
 
@@ -160,7 +160,7 @@ execute_trace ()
       = gimple_build_try (call_func_start, outer_cleanup, GIMPLE_TRY_FINALLY);
   // update body bind body
   gimple_bind_set_body (body, outer_try);
-  dump_function_to_file (current_function_decl, stderr,
+  dump_function_to_file (current_function_decl, dump_file,
                          TDF_TREE | TDF_BLOCKS | TDF_VERBOSE);
   // exit (0);
   return 0;
