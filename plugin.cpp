@@ -15,7 +15,6 @@
 #include "target.h"
 #include "df.h"
 #include "tree-ssa-alias.h"
-#include "pointer-set.h"
 #include "internal-fn.h"
 #include "is-a.h"
 #include "gimple.h"
@@ -24,14 +23,13 @@
 #include "gimplify.h"
 #include "gimple-iterator.h"
 
-#include "tree-pretty-print.h"
+extern void print_generic_decl (FILE *file, tree decl, int flags);
+extern void print_node (FILE *file, const char *prefix, tree node, int indent);
 
 static struct pass_data mypass = {
   GIMPLE_PASS,              /* type */
   "gen_trace",              /* name */
   OPTGROUP_NONE,            /* optinfo_flags */
-  false,                    /* has_gate */
-  true,                     /* has_execute */
   TV_NONE,                  /* tv_id */
   PROP_gimple_any,          /* properties_required */
   0,                        /* properties_provided */
@@ -55,7 +53,7 @@ build_type ()
   TYPE_SIZE_UNIT (ret_type) = build_int_cst (integer_type_node, 16);
   TYPE_NAME (ret_type) = get_identifier ("__CtraceStruct__");
   fprintf (stderr, "begin print built type:\n");
-  print_generic_decl (stderr, ret_type, 0);
+  print_node (stderr, "LINZJ", ret_type, 0);
   fprintf (stderr, "end print built type:\n");
   return ret_type;
 }
@@ -71,7 +69,7 @@ build_function_decl (const char *name, tree param_type)
   func_decl = build_decl (UNKNOWN_LOCATION, FUNCTION_DECL,
                           get_identifier (name), function_type_list);
   fprintf (stderr, "begin print built function type %s:\n", name);
-  print_generic_decl (stderr, func_decl, 0);
+  print_node (stderr, "LINZJ", func_decl, 0);
   fprintf (stderr, "end print built function type %s:\n", name);
   TREE_USED (func_decl) = 1;
 
@@ -101,6 +99,7 @@ make_fname_decl ()
   DECL_INITIAL (decl) = init;
 
   TREE_USED (decl) = 1;
+  TREE_ADDRESSABLE (decl) = 1;
 
   return decl;
 }
@@ -125,6 +124,8 @@ execute_trace ()
 
   var_decl = build_decl (UNKNOWN_LOCATION, VAR_DECL,
                          get_identifier ("__ctrace_var__"), record_type);
+  DECL_CONTEXT (var_decl) = current_function_decl;
+  TREE_ADDRESSABLE (var_decl) = 1;
   declare_vars (var_decl, body, false);
   TREE_USED (var_decl) = 1;
   // mimic __FUNCTION__ builtin.
@@ -172,8 +173,14 @@ public:
       : gimple_opt_pass (mydata, context)
   {
   }
+
+  virtual bool
+  gate (function *)
+  {
+    return true;
+  }
   unsigned int
-  execute ()
+  execute (function *)
   {
     return execute_trace ();
   }
