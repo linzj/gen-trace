@@ -22,9 +22,12 @@
 #include "stringpool.h"
 #include "gimplify.h"
 #include "gimple-iterator.h"
+#define CTRACE_THREAD_SUPPORTED
+#include "ctrace.h"
 
 extern void print_generic_decl (FILE *file, tree decl, int flags);
 extern void print_node (FILE *file, const char *prefix, tree node, int indent);
+extern void print_generic_stmt (FILE *file, tree t, int flags);
 
 static struct pass_data mypass = {
   GIMPLE_PASS,              /* type */
@@ -46,15 +49,19 @@ build_type ()
   tree ret_type, i_type, a_type, field_decl;
   ret_type = make_node (RECORD_TYPE);
 
-  i_type = build_index_type (size_int (15));
+  i_type = build_index_type (size_int (sizeof (CTrace) - 1));
   a_type = build_array_type (char_type_node, i_type);
   field_decl = build_decl (UNKNOWN_LOCATION, FIELD_DECL, NULL_TREE, a_type);
   TYPE_FIELDS (ret_type) = field_decl;
-  TYPE_SIZE_UNIT (ret_type) = build_int_cst (integer_type_node, 16);
+  TYPE_SIZE_UNIT (ret_type)
+      = build_int_cst (integer_type_node, sizeof (CTrace));
   TYPE_NAME (ret_type) = get_identifier ("__CtraceStruct__");
-  fprintf (dump_file, "begin print built type:\n");
-  print_node (dump_file, "LINZJ", ret_type, 0);
-  fprintf (dump_file, "end print built type:\n");
+  if (dump_file)
+    {
+      fprintf (dump_file, "begin print built type:\n");
+      print_generic_stmt (dump_file, ret_type, TDF_VERBOSE);
+      fprintf (dump_file, "end print built type:\n");
+    }
   return ret_type;
 }
 
@@ -65,12 +72,16 @@ build_function_decl (const char *name, tree param_type)
 
   function_type_list = build_function_type_list (
       void_type_node, build_pointer_type (param_type),
-      build_pointer_type (char_type_node), NULL_TREE);
+      build_pointer_type (build_type_variant (char_type_node, true, false)),
+      NULL_TREE);
   func_decl = build_decl (UNKNOWN_LOCATION, FUNCTION_DECL,
                           get_identifier (name), function_type_list);
-  fprintf (dump_file, "begin print built function type %s:\n", name);
-  print_node (dump_file, "LINZJ", func_decl, 0);
-  fprintf (dump_file, "end print built function type %s:\n", name);
+  if (dump_file)
+    {
+      fprintf (dump_file, "begin print built function type %s:\n", name);
+      print_generic_decl (dump_file, func_decl, TDF_VERBOSE);
+      fprintf (dump_file, "end print built function type %s:\n", name);
+    }
   TREE_USED (func_decl) = 1;
 
   return func_decl;
@@ -96,10 +107,12 @@ make_fname_decl ()
   init = build_string (length + 1, name);
   TREE_TYPE (init) = type;
   TREE_READONLY (init) = 1;
+  DECL_READ_P (decl) = 1;
   DECL_INITIAL (decl) = init;
 
   TREE_USED (decl) = 1;
   TREE_ADDRESSABLE (decl) = 1;
+  DECL_CONTEXT (decl) = current_function_decl;
 
   return decl;
 }
@@ -160,8 +173,11 @@ execute_trace ()
       = gimple_build_try (call_func_start, outer_cleanup, GIMPLE_TRY_FINALLY);
   // update body bind body
   gimple_bind_set_body (body, outer_try);
-  dump_function_to_file (current_function_decl, dump_file,
-                         TDF_TREE | TDF_BLOCKS | TDF_VERBOSE);
+  if (dump_file)
+    {
+      dump_function_to_file (current_function_decl, dump_file,
+                             TDF_TREE | TDF_BLOCKS | TDF_VERBOSE);
+    }
   // exit (0);
   return 0;
 }
