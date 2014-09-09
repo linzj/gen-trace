@@ -99,7 +99,7 @@ CTrace::Submit (const CTrace *This)
   timespec now_thread;
   clock_gettime (CLOCK_THREAD_CPUTIME_ID, &now_thread);
   tdur = (now_thread.tv_sec - This->clock_thread_.tv_sec) * 1000000000LL
-        + (now_thread.tv_nsec - This->clock_thread_.tv_nsec);
+         + (now_thread.tv_nsec - This->clock_thread_.tv_nsec);
 
   {
     SUBMIT_LOCK_VAR;
