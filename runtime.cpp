@@ -1,4 +1,5 @@
 #include <new>
+#define CTRACE_THREAD_SUPPORTED
 #include "ctrace.h"
 
 extern "C" {
