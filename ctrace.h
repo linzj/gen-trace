@@ -2,6 +2,7 @@
 #define CTRACE_H
 #include <time.h>
 #include <stdint.h>
+#include <inttypes.h>
 #include <sys/types.h>
 #include <unistd.h>
 #include <sys/syscall.h>
@@ -145,9 +146,9 @@ CTrace::Submit (const CTrace *This)
       {
         fprintf (f, ", ");
       }
-    fprintf (f, "{\"cat\":\"%s\", \"pid\":%d, \"tid\":%d, \"ts\":%lu, "
-                "\"ph\":\"X\", \"name\":\"%s\", \"dur\":%lu, \"tts\":%lu, "
-                "\"tdur\":%lu}",
+    fprintf (f, "{\"cat\":\"%s\", \"pid\":%d, \"tid\":%d, \"ts\":%" PRIu64
+                ", \"ph\":\"X\", \"name\":\"%s\", \"dur\":%" PRIu64
+                ", \"tts\":%" PRIu64 ", \"tdur\":%" PRIu64 "}",
              This->cat_, This->pid_, This->tid_,
              timespec2uint64_t (&This->clock_), This->name_, dur,
              timespec2uint64_t (&This->clock_thread_), tdur);
