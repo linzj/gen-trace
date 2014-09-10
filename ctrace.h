@@ -4,7 +4,7 @@
 #include <stdint.h>
 #include <sys/types.h>
 #include <unistd.h>
-#include <syscall.h>
+#include <sys/syscall.h>
 #include <stdio.h>
 
 #ifndef CTRACE_FILE_NAME
