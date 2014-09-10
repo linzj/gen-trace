@@ -1,7 +1,7 @@
 #include <new>
 #define __STDC_FORMAT_MACROS
 #define CTRACE_FILE_NAME "/sdcard/trace.json"
-#define CTRACE_OMIT_JITTER 100000
+#define CTRACE_OMIT_JITTER 10000
 #define CTRACE_THREAD_SUPPORTED
 #include "ctrace.h"
 
