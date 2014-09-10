@@ -17,6 +17,10 @@
 #define SUBMIT_LOCK_VAR
 #endif // CTRACE_THREAD_SUPPORTED
 
+#ifndef CTRACE_OMIT_JITTER
+#define CTRACE_OMIT_JITTER 0UL
+#endif // CTRACE_OMIT_JITTER
+
 class CTrace
 {
 public:
@@ -95,6 +99,8 @@ CTrace::Submit (const CTrace *This)
   clock_gettime (CLOCK_MONOTONIC, &now);
   dur = (now.tv_sec - This->clock_.tv_sec) * 1000000000LL
         + (now.tv_nsec - This->clock_.tv_nsec);
+  if (dur < CTRACE_OMIT_JITTER)
+    return;
 
   timespec now_thread;
   clock_gettime (CLOCK_THREAD_CPUTIME_ID, &now_thread);
