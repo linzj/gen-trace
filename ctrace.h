@@ -335,6 +335,12 @@ CTrace::Submit (const CTrace *This)
              This->cat_, This->pid_, This->tid_, This->clock_, This->name_,
              dur);
 #endif // CTRACE_THREAD_SUPPORTED
+    static int flushCount = 0;
+    if (flushCount++ == 5)
+      {
+        fflush (f);
+        flushCount = 0;
+      }
   }
 }
 
