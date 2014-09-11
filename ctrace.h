@@ -330,8 +330,8 @@ CTrace::Submit (const CTrace *This)
              dur, This->clock_thread_, dur_thread);
 
 #else
-    fprintf (f, "{\"cat\":\"%s\", \"pid\":%d, \"tid\":%d, \"ts\":%lu, "
-                "\"ph\":\"X\", \"name\":\"%s\", \"dur\": %lu}",
+    fprintf (f, "{\"cat\":\"%s\", \"pid\":%d, \"tid\":%d, \"ts\":%" PRIu64 ", "
+                "\"ph\":\"X\", \"name\":\"%s\", \"dur\": %" PRIu64 "}",
              This->cat_, This->pid_, This->tid_, This->clock_, This->name_,
              dur);
 #endif // CTRACE_THREAD_SUPPORTED
