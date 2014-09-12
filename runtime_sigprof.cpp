@@ -32,6 +32,15 @@ pthread_mutex_t file_mutex = PTHREAD_MUTEX_INITIALIZER;
 static const int frequency = 50;
 static const int ticks = 1000;
 
+struct ucontext
+{
+  unsigned long uc_flags;
+  struct ucontext *uc_link;
+  stack_t uc_stack;
+  struct sigcontext uc_mcontext;
+  sigset_t uc_sigmask; /* mask last for extensibility */
+};
+
 struct CTraceStruct
 {
   uint64_t start_time_;
@@ -127,6 +136,10 @@ ThreadInfo::ThreadInfo ()
       = (static_cast<uint64_t> (ts_thread.tv_sec) * kMicrosecondsPerSecond)
         + (static_cast<uint64_t> (ts_thread.tv_nsec)
            / kNanosecondsPerMicrosecond);
+  sigset_t unblock_set;
+  sigemptyset (&unblock_set);
+  sigaddset (&unblock_set, SIGPROF);
+  sigprocmask (SIG_UNBLOCK, &unblock_set, 0);
 }
 
 CTraceStruct::CTraceStruct (const char *name)
@@ -153,7 +166,7 @@ delete_thread_info (void *tinfo)
 }
 
 void
-myhandler (int)
+myhandler (int, siginfo_t *, void *context)
 {
   int tid = syscall (__NR_gettid, 0);
   // we don't use get_thread_info, because
@@ -162,7 +175,12 @@ myhandler (int)
   // created in __start_ctrace__.
   ThreadInfo *tinfo = ThreadInfo::Find (tid);
   if (!tinfo)
-    return;
+    {
+      // block this signal if it does not belong to
+      // the profiling threads.
+      sigaddset (&static_cast<ucontext *> (context)->uc_sigmask, SIGPROF);
+      return;
+    }
   uint64_t old_time = tinfo->current_time_;
   uint64_t &current_time_thread = tinfo->current_time_;
   current_time_thread += ticks * frequency;
@@ -203,8 +221,8 @@ struct Initializer
     pthread_key_create (&thread_info_key, delete_thread_info);
     struct sigaction myaction = { 0 };
     struct itimerval timer;
-    myaction.sa_handler = myhandler;
-    myaction.sa_flags = SA_RESTART;
+    myaction.sa_sigaction = myhandler;
+    myaction.sa_flags = SA_SIGINFO;
     sigaction (SIGPROF, &myaction, NULL);
 
     timer.it_value.tv_sec = 0;
