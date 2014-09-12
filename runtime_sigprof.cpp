@@ -283,7 +283,7 @@ __end_ctrace__ (CTraceStruct *c, const char *name)
             {
               // propagate the back's mini end time
               tinfo->stack_[tinfo->stack_end_ - 1]->min_end_time_
-                  = c->min_end_time_ + 1;
+                  = c->min_end_time_ + frequency;
             }
         }
     }
