@@ -29,6 +29,8 @@ pthread_key_t thread_info_key;
 FILE *file_to_write;
 static const uint64_t invalid_time = static_cast<uint64_t> (-1);
 pthread_mutex_t file_mutex = PTHREAD_MUTEX_INITIALIZER;
+static const int frequency = 50;
+static const int ticks = 1000;
 
 struct CTraceStruct
 {
@@ -40,7 +42,7 @@ struct CTraceStruct
 
 struct ThreadInfo
 {
-  static const int MAX_STACK = 1000;
+  static const int MAX_STACK = ticks;
   int pid_;
   int tid_;
   CTraceStruct *stack_[MAX_STACK];
@@ -163,7 +165,7 @@ myhandler (int)
     return;
   uint64_t old_time = tinfo->current_time_;
   uint64_t &current_time_thread = tinfo->current_time_;
-  current_time_thread += 1000;
+  current_time_thread += ticks * frequency;
 
   if (tinfo->stack_end_ >= ThreadInfo::MAX_STACK)
     {
@@ -174,12 +176,13 @@ myhandler (int)
       CTraceStruct *cur = tinfo->stack_[i];
       if (cur->start_time_ != invalid_time)
         continue;
-      cur->start_time_ = old_time++;
+      cur->start_time_ = old_time;
+      old_time += frequency;
     }
   if (tinfo->stack_end_ != 0)
     {
       tinfo->stack_[tinfo->stack_end_ - 1]->min_end_time_ = current_time_thread
-                                                            + 1;
+                                                            + frequency;
     }
 }
 
@@ -205,7 +208,7 @@ struct Initializer
     sigaction (SIGPROF, &myaction, NULL);
 
     timer.it_value.tv_sec = 0;
-    timer.it_value.tv_usec = 1;
+    timer.it_value.tv_usec = frequency;
     timer.it_interval = timer.it_value;
     setitimer (ITIMER_PROF, &timer, NULL);
     file_to_write = fopen (CTRACE_FILE_NAME, "w");
