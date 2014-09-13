@@ -283,6 +283,7 @@ myhandler (int, siginfo_t *, void *context)
           // will block SIGPROF
           sigaddset (&static_cast<ucontext *> (context)->uc_sigmask, SIGPROF);
           tinfo->SetBlocked ();
+          tinfo->idle_times_ = 0;
         }
     }
   // try update clock
