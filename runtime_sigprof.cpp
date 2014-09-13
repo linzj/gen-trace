@@ -28,11 +28,38 @@ namespace
 pthread_key_t thread_info_key;
 FILE *file_to_write;
 static const uint64_t invalid_time = static_cast<uint64_t> (-1);
-pthread_mutex_t file_mutex = PTHREAD_MUTEX_INITIALIZER;
-static const int frequency = 100;
-static const int ticks = 1000;
+static const int frequency = 1000;
+static const int ticks = 1;
 static const int max_idel_times = 100;
 int pipes[2];
+#ifdef __ARM_EABI__
+
+struct sigcontext
+{
+  unsigned long trap_no;
+  unsigned long error_code;
+  unsigned long oldmask;
+  unsigned long arm_r0;
+  unsigned long arm_r1;
+  unsigned long arm_r2;
+  unsigned long arm_r3;
+  unsigned long arm_r4;
+  unsigned long arm_r5;
+  unsigned long arm_r6;
+  unsigned long arm_r7;
+  unsigned long arm_r8;
+  unsigned long arm_r9;
+  unsigned long arm_r10;
+  unsigned long arm_fp;
+  unsigned long arm_ip;
+  unsigned long arm_sp;
+  unsigned long arm_lr;
+  unsigned long arm_pc;
+  unsigned long arm_cpsr;
+  unsigned long fault_address;
+};
+
+#endif
 
 struct ucontext
 {
@@ -53,7 +80,7 @@ struct CTraceStruct
 
 struct ThreadInfo
 {
-  static const int MAX_STACK = ticks;
+  static const int MAX_STACK = frequency;
   int pid_;
   int tid_;
   CTraceStruct *stack_[MAX_STACK];
@@ -61,7 +88,7 @@ struct ThreadInfo
   uint64_t current_time_;
   int idle_times_;
   ThreadInfo ();
-  void Clear();
+  void Clear ();
   static ThreadInfo *New ();
   static ThreadInfo *Find ();
   static ThreadInfo *Find (const int);
@@ -173,7 +200,7 @@ get_thread_info ()
 void
 delete_thread_info (void *tinfo)
 {
-  static_cast<ThreadInfo *> (tinfo)->Clear();
+  static_cast<ThreadInfo *> (tinfo)->Clear ();
 }
 
 void
@@ -211,7 +238,7 @@ myhandler (int, siginfo_t *, void *context)
   if (tinfo->stack_end_ != 0)
     {
       tinfo->stack_[tinfo->stack_end_ - 1]->min_end_time_ = current_time_thread
-                                                            + frequency;
+                                                            + ticks;
     }
   else
     {
@@ -219,21 +246,11 @@ myhandler (int, siginfo_t *, void *context)
       if (tinfo->idle_times_ >= max_idel_times)
         {
           // next enter will block SIGPROF
-          tinfo->Clear();
+          tinfo->Clear ();
           pthread_setspecific (thread_info_key, NULL);
         }
     }
 }
-
-struct Lock
-{
-  Lock (pthread_mutex_t *mutex) : mutex_ (mutex)
-  {
-    pthread_mutex_lock (mutex_);
-  }
-  ~Lock () { pthread_mutex_unlock (mutex_); }
-  pthread_mutex_t *mutex_;
-};
 
 void *writer_thread (void *);
 
@@ -289,9 +306,17 @@ record_this (CTraceStruct *c, ThreadInfo *tinfo)
   r->start_time_ = c->start_time_;
   r->name_ = c->name_;
   r->dur_ = c->min_end_time_ - c->start_time_;
-  int written_bytes = write (pipes[1], &r, sizeof (Record *));
-  if (written_bytes != sizeof (Record *))
-    CRASH ();
+  while (true)
+    {
+      int written_bytes = write (pipes[1], &r, sizeof (Record *));
+      if (written_bytes != sizeof (Record *))
+        {
+          if (errno == EINTR)
+            continue;
+          CRASH ();
+        }
+      break;
+    }
 }
 
 void *
@@ -307,8 +332,9 @@ writer_thread (void *)
       int read_bytes = read (fd, &current, sizeof (Record *));
       if (read_bytes != sizeof (Record *))
         {
+          if (errno == EINTR)
+            continue;
           CRASH ();
-          continue;
         }
 
       static bool needComma = false;
@@ -373,7 +399,7 @@ __end_ctrace__ (CTraceStruct *c, const char *name)
             {
               // propagate the back's mini end time
               tinfo->stack_[tinfo->stack_end_ - 1]->min_end_time_
-                  = c->min_end_time_ + frequency;
+                  = c->min_end_time_ + ticks;
             }
         }
     }
