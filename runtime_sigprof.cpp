@@ -394,6 +394,11 @@ __end_ctrace__ (CTraceStruct *c, const char *name)
   if (file_to_write == 0)
     return;
   ThreadInfo *tinfo = get_thread_info ();
+  if (tinfo->stack_end_ == 0)
+    {
+      // we just clear the tinfo
+      return;
+    }
   tinfo->stack_end_--;
   if (tinfo->stack_end_ < ThreadInfo::MAX_STACK)
     {
