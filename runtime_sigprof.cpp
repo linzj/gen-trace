@@ -33,7 +33,8 @@ FILE *file_to_write;
 static const uint64_t invalid_time = static_cast<uint64_t> (-1);
 static const int frequency = 1000;
 static const int ticks = 1;
-static const int max_idle_times = 1;
+static const int max_idle_times = 1000;
+static const int update_clock_times = 100;
 
 int pipes[2];
 #ifdef __ARM_EABI__
@@ -91,8 +92,11 @@ struct ThreadInfo
   int stack_end_;
   uint64_t current_time_;
   int idle_times_;
+  int clock_update_count_;
+  bool blocked_;
   ThreadInfo ();
   void Clear ();
+  void SetBlocked ();
   static ThreadInfo *New ();
   static ThreadInfo *Find ();
   static ThreadInfo *Find (const int);
@@ -104,6 +108,13 @@ void
 ThreadInfo::Clear ()
 {
   tid_ = 0;
+}
+
+void
+ThreadInfo::SetBlocked ()
+{
+  blocked_ = true;
+  clock_update_count_ = 0;
 }
 
 ThreadInfo *
@@ -165,26 +176,12 @@ ThreadInfo::New ()
 
 ThreadInfo::ThreadInfo ()
 {
-  static const int64_t kMillisecondsPerSecond = 1000;
-  static const int64_t kMicrosecondsPerMillisecond = 1000;
-  static const int64_t kMicrosecondsPerSecond = kMicrosecondsPerMillisecond
-                                                * kMillisecondsPerSecond;
-  static const int64_t kNanosecondsPerMicrosecond = 1000;
-
   pid_ = getpid ();
   tid_ = syscall (__NR_gettid, 0);
   stack_end_ = 0;
-  struct timespec ts_thread;
-  clock_gettime (CLOCK_MONOTONIC, &ts_thread);
-  current_time_
-      = (static_cast<uint64_t> (ts_thread.tv_sec) * kMicrosecondsPerSecond)
-        + (static_cast<uint64_t> (ts_thread.tv_nsec)
-           / kNanosecondsPerMicrosecond);
-  sigset_t unblock_set;
-  sigemptyset (&unblock_set);
-  sigaddset (&unblock_set, SIGPROF);
-  sigprocmask (SIG_UNBLOCK, &unblock_set, 0);
   idle_times_ = 0;
+  blocked_ = true;
+  clock_update_count_ = 0;
 }
 
 CTraceStruct::CTraceStruct (const char *name)
@@ -195,12 +192,44 @@ CTraceStruct::CTraceStruct (const char *name)
 }
 
 ThreadInfo *
-get_thread_info ()
+_get_thread_info ()
 {
   ThreadInfo *tinfo = ThreadInfo::Find ();
   if (tinfo)
     return tinfo;
   tinfo = ThreadInfo::New ();
+  return tinfo;
+}
+
+uint64_t
+GetTimesFromClock ()
+{
+  static const int64_t kMillisecondsPerSecond = 1000;
+  static const int64_t kMicrosecondsPerMillisecond = 1000;
+  static const int64_t kMicrosecondsPerSecond = kMicrosecondsPerMillisecond
+                                                * kMillisecondsPerSecond;
+  static const int64_t kNanosecondsPerMicrosecond = 1000;
+
+  struct timespec ts_thread;
+  clock_gettime (CLOCK_MONOTONIC, &ts_thread);
+  return (static_cast<uint64_t> (ts_thread.tv_sec) * kMicrosecondsPerSecond)
+         + (static_cast<uint64_t> (ts_thread.tv_nsec)
+            / kNanosecondsPerMicrosecond);
+}
+
+ThreadInfo *
+GetThreadInfo ()
+{
+  ThreadInfo *tinfo = _get_thread_info ();
+  if (tinfo->blocked_)
+    {
+      tinfo->current_time_ = GetTimesFromClock ();
+      sigset_t unblock_set;
+      sigemptyset (&unblock_set);
+      sigaddset (&unblock_set, SIGPROF);
+      sigprocmask (SIG_UNBLOCK, &unblock_set, 0);
+      tinfo->blocked_ = false;
+    }
   return tinfo;
 }
 
@@ -214,7 +243,7 @@ void
 myhandler (int, siginfo_t *, void *context)
 {
   int tid = syscall (__NR_gettid, 0);
-  // we don't use get_thread_info, because
+  // we don't use GetThreadInfo , because
   // it make no sense to deal
   // with the thread without this structure
   // created in __start_ctrace__.
@@ -251,10 +280,16 @@ myhandler (int, siginfo_t *, void *context)
       tinfo->idle_times_++;
       if (tinfo->idle_times_ >= max_idle_times)
         {
-          // next enter will block SIGPROF
-          tinfo->Clear ();
-          pthread_setspecific (thread_info_key, NULL);
+          // will block SIGPROF
+          sigaddset (&static_cast<ucontext *> (context)->uc_sigmask, SIGPROF);
+          tinfo->SetBlocked ();
         }
+    }
+  // try update clock
+  if (tinfo->clock_update_count_++ > update_clock_times)
+    {
+      tinfo->clock_update_count_ = 0;
+      current_time_thread = GetTimesFromClock ();
     }
 }
 
@@ -380,7 +415,7 @@ __start_ctrace__ (void *c, const char *name)
   if (file_to_write == 0)
     return;
   CTraceStruct *cs = new (c) CTraceStruct (name);
-  ThreadInfo *tinfo = get_thread_info ();
+  ThreadInfo *tinfo = GetThreadInfo ();
   if (tinfo->stack_end_ < ThreadInfo::MAX_STACK)
     {
       tinfo->stack_[tinfo->stack_end_] = cs;
@@ -393,12 +428,7 @@ __end_ctrace__ (CTraceStruct *c, const char *name)
 {
   if (file_to_write == 0)
     return;
-  ThreadInfo *tinfo = get_thread_info ();
-  if (tinfo->stack_end_ == 0)
-    {
-      // we just clear the tinfo
-      return;
-    }
+  ThreadInfo *tinfo = GetThreadInfo ();
   tinfo->stack_end_--;
   if (tinfo->stack_end_ < ThreadInfo::MAX_STACK)
     {
