@@ -115,6 +115,7 @@ ThreadInfo::SetBlocked ()
 {
   blocked_ = true;
   clock_update_count_ = 0;
+  idle_times_ = 0;
 }
 
 ThreadInfo *
