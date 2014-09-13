@@ -227,13 +227,12 @@ myhandler (int, siginfo_t *, void *context)
     {
       CRASH ();
     }
-  for (int i = 0; i < tinfo->stack_end_; ++i)
+  for (int i = 0; i < tinfo->stack_end_; ++i, old_time += ticks)
     {
       CTraceStruct *cur = tinfo->stack_[i];
       if (cur->start_time_ != invalid_time)
         continue;
       cur->start_time_ = old_time;
-      old_time += ticks;
     }
   if (tinfo->stack_end_ != 0)
     {
