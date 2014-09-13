@@ -33,7 +33,7 @@ FILE *file_to_write;
 static const uint64_t invalid_time = static_cast<uint64_t> (-1);
 static const int frequency = 1000;
 static const int ticks = 1;
-static const int max_idel_times = 100;
+static const int max_idle_times = 1;
 
 int pipes[2];
 #ifdef __ARM_EABI__
@@ -249,7 +249,7 @@ myhandler (int, siginfo_t *, void *context)
   else
     {
       tinfo->idle_times_++;
-      if (tinfo->idle_times_ >= max_idel_times)
+      if (tinfo->idle_times_ >= max_idle_times)
         {
           // next enter will block SIGPROF
           tinfo->Clear ();
