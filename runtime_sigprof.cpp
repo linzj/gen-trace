@@ -23,6 +23,9 @@
     }                                                                         \
   while (0)
 
+#ifdef CTRACE_ENABLE_STAT
+int stat_find_miss = 0;
+#endif // CTRACE_ENABLE_STAT
 namespace
 {
 pthread_key_t thread_info_key;
@@ -31,6 +34,7 @@ static const uint64_t invalid_time = static_cast<uint64_t> (-1);
 static const int frequency = 1000;
 static const int ticks = 1;
 static const int max_idel_times = 100;
+
 int pipes[2];
 #ifdef __ARM_EABI__
 
@@ -114,6 +118,9 @@ ThreadInfo::Find (const int tid)
           return &info_store[hash_index];
         }
       hash_index++;
+#ifdef CTRACE_ENABLE_STAT
+      __sync_add_and_fetch (&stat_find_miss, 1);
+#endif // CTRACE_ENABLE_STAT
       if (hash_index >= MAX_THREADS)
         hash_index = 0;
     }
@@ -399,6 +406,7 @@ __end_ctrace__ (CTraceStruct *c, const char *name)
               // propagate the back's mini end time
               tinfo->stack_[tinfo->stack_end_ - 1]->min_end_time_
                   = c->min_end_time_ + ticks;
+              tinfo->current_time_ += ticks;
             }
         }
     }
