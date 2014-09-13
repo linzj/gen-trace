@@ -29,8 +29,10 @@ pthread_key_t thread_info_key;
 FILE *file_to_write;
 static const uint64_t invalid_time = static_cast<uint64_t> (-1);
 pthread_mutex_t file_mutex = PTHREAD_MUTEX_INITIALIZER;
-static const int frequency = 50;
+static const int frequency = 100;
 static const int ticks = 1000;
+static const int max_idel_times = 100;
+int pipes[2];
 
 struct ucontext
 {
@@ -57,13 +59,21 @@ struct ThreadInfo
   CTraceStruct *stack_[MAX_STACK];
   int stack_end_;
   uint64_t current_time_;
+  int idle_times_;
   ThreadInfo ();
+  void Clear();
   static ThreadInfo *New ();
   static ThreadInfo *Find ();
   static ThreadInfo *Find (const int);
 };
 static const int MAX_THREADS = 100;
 char info_store_char[MAX_THREADS * sizeof (ThreadInfo)];
+
+void
+ThreadInfo::Clear ()
+{
+  tid_ = 0;
+}
 
 ThreadInfo *
 ThreadInfo::Find (const int tid)
@@ -140,6 +150,7 @@ ThreadInfo::ThreadInfo ()
   sigemptyset (&unblock_set);
   sigaddset (&unblock_set, SIGPROF);
   sigprocmask (SIG_UNBLOCK, &unblock_set, 0);
+  idle_times_ = 0;
 }
 
 CTraceStruct::CTraceStruct (const char *name)
@@ -162,7 +173,7 @@ get_thread_info ()
 void
 delete_thread_info (void *tinfo)
 {
-  static_cast<ThreadInfo *> (tinfo)->tid_ = 0;
+  static_cast<ThreadInfo *> (tinfo)->Clear();
 }
 
 void
@@ -202,6 +213,16 @@ myhandler (int, siginfo_t *, void *context)
       tinfo->stack_[tinfo->stack_end_ - 1]->min_end_time_ = current_time_thread
                                                             + frequency;
     }
+  else
+    {
+      tinfo->idle_times_++;
+      if (tinfo->idle_times_ >= max_idel_times)
+        {
+          // next enter will block SIGPROF
+          tinfo->Clear();
+          pthread_setspecific (thread_info_key, NULL);
+        }
+    }
 }
 
 struct Lock
@@ -213,6 +234,8 @@ struct Lock
   ~Lock () { pthread_mutex_unlock (mutex_); }
   pthread_mutex_t *mutex_;
 };
+
+void *writer_thread (void *);
 
 struct Initializer
 {
@@ -231,36 +254,85 @@ struct Initializer
     setitimer (ITIMER_PROF, &timer, NULL);
     file_to_write = fopen (CTRACE_FILE_NAME, "w");
     fprintf (file_to_write, "{\"traceEvents\": [");
+    pipe (pipes);
+    pthread_t my_writer_thread;
+    pthread_create (&my_writer_thread, NULL, writer_thread, NULL);
   }
-  ~Initializer () { fclose (file_to_write); }
+
+  ~Initializer ()
+  {
+    fclose (file_to_write);
+    close (pipes[0]);
+    close (pipes[1]);
+  }
 };
 
 Initializer __init__;
 
+struct Record
+{
+  int pid_;
+  int tid_;
+  uint64_t start_time_;
+  uint64_t dur_;
+  const char *name_;
+};
+
 void
 record_this (CTraceStruct *c, ThreadInfo *tinfo)
 {
-  Lock __lock__ (&file_mutex);
-  static bool needComma = false;
-  if (!needComma)
-    {
-      needComma = true;
-    }
-  else
-    {
-      fprintf (file_to_write, ", ");
-    }
+  Record *r = static_cast<Record *> (malloc (sizeof (Record)));
+  if (!r)
+    CRASH ();
+  r->pid_ = tinfo->pid_;
+  r->tid_ = tinfo->tid_;
+  r->start_time_ = c->start_time_;
+  r->name_ = c->name_;
+  r->dur_ = c->min_end_time_ - c->start_time_;
+  int written_bytes = write (pipes[1], &r, sizeof (Record *));
+  if (written_bytes != sizeof (Record *))
+    CRASH ();
+}
 
-  fprintf (file_to_write,
-           "{\"cat\":\"%s\", \"pid\":%d, \"tid\":%d, \"ts\":%" PRIu64 ", "
-           "\"ph\":\"X\", \"name\":\"%s\", \"dur\": %" PRIu64 "}",
-           "profile", tinfo->pid_, tinfo->tid_, c->start_time_, c->name_,
-           c->min_end_time_ - c->start_time_);
-  static int flushCount = 0;
-  if (flushCount++ == 5)
+void *
+writer_thread (void *)
+{
+  pthread_setname_np (pthread_self (), "writer_thread");
+  int fd = pipes[0];
+
+  while (true)
     {
-      fflush (file_to_write);
-      flushCount = 0;
+      Record *current;
+
+      int read_bytes = read (fd, &current, sizeof (Record *));
+      if (read_bytes != sizeof (Record *))
+        {
+          CRASH ();
+          continue;
+        }
+
+      static bool needComma = false;
+      if (!needComma)
+        {
+          needComma = true;
+        }
+      else
+        {
+          fprintf (file_to_write, ", ");
+        }
+
+      fprintf (file_to_write,
+               "{\"cat\":\"%s\", \"pid\":%d, \"tid\":%d, \"ts\":%" PRIu64 ", "
+               "\"ph\":\"X\", \"name\":\"%s\", \"dur\": %" PRIu64 "}",
+               "profile", current->pid_, current->tid_, current->start_time_,
+               current->name_, current->dur_);
+      static int flushCount = 0;
+      if (flushCount++ == 5)
+        {
+          fflush (file_to_write);
+          flushCount = 0;
+        }
+      free (current);
     }
 }
 }
