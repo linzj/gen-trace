@@ -233,7 +233,7 @@ myhandler (int, siginfo_t *, void *context)
       if (cur->start_time_ != invalid_time)
         continue;
       cur->start_time_ = old_time;
-      old_time += frequency;
+      old_time += ticks;
     }
   if (tinfo->stack_end_ != 0)
     {
