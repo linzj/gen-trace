@@ -95,20 +95,21 @@ struct ThreadInfo
   int clock_update_count_;
   bool blocked_;
   ThreadInfo ();
-  void Clear ();
   void SetBlocked ();
   static ThreadInfo *New ();
   static ThreadInfo *Find ();
   static ThreadInfo *Find (const int);
 };
+
 static const int MAX_THREADS = 100;
 char info_store_char[MAX_THREADS * sizeof (ThreadInfo)];
 
-void
-ThreadInfo::Clear ()
+struct FreeListNode
 {
-  tid_ = 0;
-}
+  const struct FreeListNode *next_;
+};
+
+FreeListNode *free_head;
 
 void
 ThreadInfo::SetBlocked ()
@@ -119,55 +120,25 @@ ThreadInfo::SetBlocked ()
 }
 
 ThreadInfo *
-ThreadInfo::Find (const int tid)
-{
-  ThreadInfo *info_store = reinterpret_cast<ThreadInfo *> (info_store_char);
-  int hash_index = tid % MAX_THREADS;
-  for (int i = 0; i < MAX_THREADS; ++i)
-    {
-      if (info_store[hash_index].tid_ == tid)
-        {
-          return &info_store[hash_index];
-        }
-      hash_index++;
-#ifdef CTRACE_ENABLE_STAT
-      __sync_add_and_fetch (&stat_find_miss, 1);
-#endif // CTRACE_ENABLE_STAT
-      if (hash_index >= MAX_THREADS)
-        hash_index = 0;
-    }
-  return NULL;
-}
-
-ThreadInfo *
 ThreadInfo::Find ()
 {
-  const int tid = syscall (__NR_gettid, 0);
-  return ThreadInfo::Find (tid);
+  return static_cast<ThreadInfo *> (pthread_getspecific (thread_info_key));
 }
 
 ThreadInfo *
 ThreadInfo::New ()
 {
-  ThreadInfo *free_thread_info = NULL;
-  ThreadInfo *info_store = reinterpret_cast<ThreadInfo *> (info_store_char);
-  int hash_index = syscall (__NR_gettid, 0) % MAX_THREADS;
-  for (int i = 0; i < MAX_THREADS; ++i)
+  ThreadInfo *free_thread_info;
+  while (true)
     {
-      if (info_store[hash_index].tid_ == 0)
-        {
-          if (!__sync_bool_compare_and_swap (&info_store[hash_index].pid_, 0,
-                                             -1))
-            {
-              goto __continue;
-            }
-          free_thread_info = &info_store[hash_index];
-          break;
-        }
-    __continue:
-      hash_index++;
-      if (hash_index >= MAX_THREADS)
-        hash_index = 0;
+      FreeListNode *current_free = free_head;
+      if (current_free == NULL)
+        CRASH ();
+      if (!__sync_bool_compare_and_swap (&free_head, current_free,
+                                         current_free->next_))
+        continue;
+      free_thread_info = reinterpret_cast<ThreadInfo *> (current_free);
+      break;
     }
   if (free_thread_info == NULL)
     CRASH ();
@@ -193,7 +164,7 @@ CTraceStruct::CTraceStruct (const char *name)
 }
 
 ThreadInfo *
-_get_thread_info ()
+_GetThreadInfo ()
 {
   ThreadInfo *tinfo = ThreadInfo::Find ();
   if (tinfo)
@@ -221,7 +192,7 @@ GetTimesFromClock ()
 ThreadInfo *
 GetThreadInfo ()
 {
-  ThreadInfo *tinfo = _get_thread_info ();
+  ThreadInfo *tinfo = _GetThreadInfo ();
   if (tinfo->blocked_)
     {
       tinfo->current_time_ = GetTimesFromClock ();
@@ -235,20 +206,26 @@ GetThreadInfo ()
 }
 
 void
-delete_thread_info (void *tinfo)
+DeleteThreadInfo (void *tinfo)
 {
-  static_cast<ThreadInfo *> (tinfo)->Clear ();
+  FreeListNode *free_node = static_cast<FreeListNode *> (tinfo);
+  while (true)
+    {
+      FreeListNode *current_free = free_head;
+      free_node->next_ = current_free;
+      if (__sync_bool_compare_and_swap (&free_head, current_free, free_node))
+        break;
+    }
 }
 
 void
 myhandler (int, siginfo_t *, void *context)
 {
-  int tid = syscall (__NR_gettid, 0);
   // we don't use GetThreadInfo , because
   // it make no sense to deal
   // with the thread without this structure
   // created in __start_ctrace__.
-  ThreadInfo *tinfo = ThreadInfo::Find (tid);
+  ThreadInfo *tinfo = ThreadInfo::Find ();
   if (!tinfo)
     {
       // block this signal if it does not belong to
@@ -299,9 +276,26 @@ void *writer_thread (void *);
 
 struct Initializer
 {
+  void
+  InitFreeList ()
+  {
+    ThreadInfo *info_store = reinterpret_cast<ThreadInfo *> (info_store_char);
+    free_head
+        = reinterpret_cast<FreeListNode *> (&info_store[MAX_THREADS - 1]);
+    free_head->next_ = NULL;
+    for (int i = MAX_THREADS - 2; i >= 0; ++i)
+      {
+        FreeListNode *current
+            = reinterpret_cast<FreeListNode *> (&info_store[i]);
+        current->next_ = free_head;
+        free_head = current;
+      }
+  }
+
   Initializer ()
   {
-    pthread_key_create (&thread_info_key, delete_thread_info);
+    pthread_key_create (&thread_info_key, DeleteThreadInfo);
+    InitFreeList ();
     struct sigaction myaction = { 0 };
     struct itimerval timer;
     myaction.sa_sigaction = myhandler;
