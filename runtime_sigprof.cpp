@@ -1,16 +1,18 @@
 #define __STDC_FORMAT_MACROS
+// C Headers
 #include <stdint.h>
 #include <inttypes.h>
 #include <time.h>
-#include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <assert.h>
+// POSIX Headers
 #include <unistd.h>
-
+#include <pthread.h>
 #include <signal.h>
 #include <sys/time.h>
 #include <sys/syscall.h>
-
+// C++ Headers
 #include <new>
 
 #ifndef CTRACE_FILE_NAME
@@ -36,7 +38,13 @@ static const int ticks = 1;
 static const int max_idle_times = 1000;
 static const int update_clock_times = 100;
 
-int pipes[2];
+// for WriterThread
+pthread_mutex_t writer_waitup_mutex = PTHREAD_MUTEX_INITIALIZER;
+volatile bool writer_waitup = false;
+pthread_cond_t writer_waitup_cond = PTHREAD_COND_INITIALIZER;
+struct Record;
+struct Record *pending_records_head;
+
 #ifdef __ARM_EABI__
 
 struct sigcontext
@@ -219,7 +227,7 @@ DeleteThreadInfo (void *tinfo)
 }
 
 void
-myhandler (int, siginfo_t *, void *context)
+MyHandler (int, siginfo_t *, void *context)
 {
   // we don't use GetThreadInfo , because
   // it make no sense to deal
@@ -272,7 +280,7 @@ myhandler (int, siginfo_t *, void *context)
     }
 }
 
-void *writer_thread (void *);
+void *WriterThread (void *);
 
 struct Initializer
 {
@@ -283,7 +291,7 @@ struct Initializer
     free_head
         = reinterpret_cast<FreeListNode *> (&info_store[MAX_THREADS - 1]);
     free_head->next_ = NULL;
-    for (int i = MAX_THREADS - 2; i >= 0; ++i)
+    for (int i = MAX_THREADS - 2; i >= 0; --i)
       {
         FreeListNode *current
             = reinterpret_cast<FreeListNode *> (&info_store[i]);
@@ -298,7 +306,7 @@ struct Initializer
     InitFreeList ();
     struct sigaction myaction = { 0 };
     struct itimerval timer;
-    myaction.sa_sigaction = myhandler;
+    myaction.sa_sigaction = MyHandler;
     myaction.sa_flags = SA_SIGINFO;
     sigaction (SIGPROF, &myaction, NULL);
 
@@ -308,17 +316,11 @@ struct Initializer
     setitimer (ITIMER_PROF, &timer, NULL);
     file_to_write = fopen (CTRACE_FILE_NAME, "w");
     fprintf (file_to_write, "{\"traceEvents\": [");
-    pipe (pipes);
     pthread_t my_writer_thread;
-    pthread_create (&my_writer_thread, NULL, writer_thread, NULL);
+    pthread_create (&my_writer_thread, NULL, WriterThread, NULL);
   }
 
-  ~Initializer ()
-  {
-    fclose (file_to_write);
-    close (pipes[0]);
-    close (pipes[1]);
-  }
+  ~Initializer () { fclose (file_to_write); }
 };
 
 Initializer __init__;
@@ -330,10 +332,21 @@ struct Record
   uint64_t start_time_;
   uint64_t dur_;
   const char *name_;
+  struct Record *next_;
+};
+
+struct Lock
+{
+  Lock (pthread_mutex_t *mutex) : mutex_ (mutex)
+  {
+    pthread_mutex_lock (mutex_);
+  }
+  ~Lock () { pthread_mutex_unlock (mutex_); }
+  pthread_mutex_t *mutex_;
 };
 
 void
-record_this (CTraceStruct *c, ThreadInfo *tinfo)
+RecordThis (CTraceStruct *c, ThreadInfo *tinfo)
 {
   Record *r = static_cast<Record *> (malloc (sizeof (Record)));
   if (!r)
@@ -345,57 +358,79 @@ record_this (CTraceStruct *c, ThreadInfo *tinfo)
   r->dur_ = c->min_end_time_ - c->start_time_;
   while (true)
     {
-      int written_bytes = write (pipes[1], &r, sizeof (Record *));
-      if (written_bytes != sizeof (Record *))
-        {
-          if (errno == EINTR)
-            continue;
-          CRASH ();
-        }
-      break;
+      Record *current_head = pending_records_head;
+      r->next_ = current_head;
+      if (__sync_bool_compare_and_swap (&pending_records_head, current_head,
+                                        r))
+        break;
     }
+  {
+    Lock lock (&writer_waitup_mutex);
+    writer_waitup = true;
+    pthread_cond_signal (&writer_waitup_cond);
+  }
+}
+
+void
+DoWriteRecursive (struct Record *current)
+{
+  if (current->next_)
+    DoWriteRecursive (current->next_);
+
+  static bool needComma = false;
+  if (!needComma)
+    {
+      needComma = true;
+    }
+  else
+    {
+      fprintf (file_to_write, ", ");
+    }
+  fprintf (file_to_write,
+           "{\"cat\":\"%s\", \"pid\":%d, \"tid\":%d, \"ts\":%" PRIu64 ", "
+           "\"ph\":\"X\", \"name\":\"%s\", \"dur\": %" PRIu64 "}",
+           "profile", current->pid_, current->tid_, current->start_time_,
+           current->name_, current->dur_);
+  static int flushCount = 0;
+  if (flushCount++ == 5)
+    {
+      fflush (file_to_write);
+      flushCount = 0;
+    }
+  free (current);
 }
 
 void *
-writer_thread (void *)
+WriterThread (void *)
 {
-  pthread_setname_np (pthread_self (), "writer_thread");
-  int fd = pipes[0];
+  pthread_setname_np (pthread_self (), "WriterThread");
 
   while (true)
     {
-      Record *current;
+      Record *record_to_write;
 
-      int read_bytes = read (fd, &current, sizeof (Record *));
-      if (read_bytes != sizeof (Record *))
+      {
+        Lock lock (&writer_waitup_mutex);
+        if (writer_waitup == false)
+          pthread_cond_wait (&writer_waitup_cond, &writer_waitup_mutex);
+        assert (writer_waitup == true);
+        writer_waitup = false;
+      }
+      while (pending_records_head)
         {
-          if (errno == EINTR)
-            continue;
-          CRASH ();
+          while (true)
+            {
+              record_to_write = pending_records_head;
+              if (record_to_write == NULL)
+                break;
+              if (__sync_bool_compare_and_swap (&pending_records_head,
+                                                record_to_write, NULL))
+                break;
+            }
+          if (record_to_write == NULL)
+            break;
+          DoWriteRecursive (record_to_write);
         }
-
-      static bool needComma = false;
-      if (!needComma)
-        {
-          needComma = true;
-        }
-      else
-        {
-          fprintf (file_to_write, ", ");
-        }
-
-      fprintf (file_to_write,
-               "{\"cat\":\"%s\", \"pid\":%d, \"tid\":%d, \"ts\":%" PRIu64 ", "
-               "\"ph\":\"X\", \"name\":\"%s\", \"dur\": %" PRIu64 "}",
-               "profile", current->pid_, current->tid_, current->start_time_,
-               current->name_, current->dur_);
-      static int flushCount = 0;
-      if (flushCount++ == 5)
-        {
-          fflush (file_to_write);
-          flushCount = 0;
-        }
-      free (current);
     }
 }
 }
@@ -431,7 +466,7 @@ __end_ctrace__ (CTraceStruct *c, const char *name)
       if (c->start_time_ != invalid_time)
         {
           // we should record this
-          record_this (c, tinfo);
+          RecordThis (c, tinfo);
           if (tinfo->stack_end_ != 0)
             {
               // propagate the back's mini end time
