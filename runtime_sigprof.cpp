@@ -272,12 +272,6 @@ MyHandler (int, siginfo_t *, void *context)
           tinfo->idle_times_ = 0;
         }
     }
-  // try update clock
-  if (tinfo->clock_update_count_++ > update_clock_times)
-    {
-      tinfo->clock_update_count_ = 0;
-      current_time_thread = GetTimesFromClock ();
-    }
 }
 
 void *WriterThread (void *);
@@ -447,6 +441,15 @@ __start_ctrace__ (void *c, const char *name)
     return;
   CTraceStruct *cs = new (c) CTraceStruct (name);
   ThreadInfo *tinfo = GetThreadInfo ();
+  if (tinfo->stack_end_ == 0)
+    {
+      // try update clock
+      if (tinfo->clock_update_count_++ > update_clock_times)
+        {
+          tinfo->clock_update_count_ = 0;
+          tinfo->current_time_ = GetTimesFromClock ();
+        }
+    }
   if (tinfo->stack_end_ < ThreadInfo::MAX_STACK)
     {
       tinfo->stack_[tinfo->stack_end_] = cs;
