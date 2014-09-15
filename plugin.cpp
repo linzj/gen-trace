@@ -33,8 +33,6 @@ static struct pass_data mypass = {
   GIMPLE_PASS,              /* type */
   "gen_trace",              /* name */
   OPTGROUP_NONE,            /* optinfo_flags */
-  false,                    /* has_gate */
-  true,                     /* has_execute */
   TV_NONE,                  /* tv_id */
   PROP_gimple_any,          /* properties_required */
   0,                        /* properties_provided */
@@ -191,8 +189,14 @@ public:
       : gimple_opt_pass (mydata, context)
   {
   }
+
+  virtual bool
+  gate (function *)
+  {
+    return true;
+  }
   unsigned int
-  execute ()
+  execute (function *)
   {
     return execute_trace ();
   }
