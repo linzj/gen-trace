@@ -36,7 +36,6 @@ static const uint64_t invalid_time = static_cast<uint64_t> (-1);
 static const int frequency = 1000;
 static const int ticks = 1;
 static const int max_idle_times = 1000;
-static const int update_clock_times = 100;
 
 // for WriterThread
 pthread_mutex_t writer_waitup_mutex = PTHREAD_MUTEX_INITIALIZER;
@@ -100,7 +99,6 @@ struct ThreadInfo
   int stack_end_;
   uint64_t current_time_;
   int idle_times_;
-  int clock_update_count_;
   bool blocked_;
   ThreadInfo ();
   void SetBlocked ();
@@ -123,7 +121,6 @@ void
 ThreadInfo::SetBlocked ()
 {
   blocked_ = true;
-  clock_update_count_ = 0;
   idle_times_ = 0;
 }
 
@@ -161,7 +158,6 @@ ThreadInfo::ThreadInfo ()
   stack_end_ = 0;
   idle_times_ = 0;
   blocked_ = true;
-  clock_update_count_ = 0;
 }
 
 CTraceStruct::CTraceStruct (const char *name)
@@ -444,11 +440,7 @@ __start_ctrace__ (void *c, const char *name)
   if (tinfo->stack_end_ == 0)
     {
       // try update clock
-      if (tinfo->clock_update_count_++ > update_clock_times)
-        {
-          tinfo->clock_update_count_ = 0;
-          tinfo->current_time_ = GetTimesFromClock ();
-        }
+      tinfo->current_time_ = GetTimesFromClock ();
     }
   if (tinfo->stack_end_ < ThreadInfo::MAX_STACK)
     {
