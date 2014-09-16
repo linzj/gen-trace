@@ -160,7 +160,7 @@ ThreadInfo::ThreadInfo ()
   tid_ = syscall (__NR_gettid, 0);
   stack_end_ = 0;
   idle_times_ = 0;
-  current_time_thread_ = 0;
+  current_time_ = 0;
   blocked_ = true;
 }
 
@@ -181,7 +181,7 @@ _GetThreadInfo ()
 }
 
 uint64_t
-GetTimesFromClock ()
+GetTimesFromClock (int clockid)
 {
   static const int64_t kMillisecondsPerSecond = 1000;
   static const int64_t kMicrosecondsPerMillisecond = 1000;
@@ -190,7 +190,7 @@ GetTimesFromClock ()
   static const int64_t kNanosecondsPerMicrosecond = 1000;
 
   struct timespec ts_thread;
-  clock_gettime (CLOCK_MONOTONIC, &ts_thread);
+  clock_gettime (clockid, &ts_thread);
   return (static_cast<uint64_t> (ts_thread.tv_sec) * kMicrosecondsPerSecond)
          + (static_cast<uint64_t> (ts_thread.tv_nsec)
             / kNanosecondsPerMicrosecond);
@@ -202,10 +202,12 @@ GetThreadInfo ()
   ThreadInfo *tinfo = _GetThreadInfo ();
   if (tinfo->blocked_)
     {
-      tinfo->current_time_ = GetTimesFromClock ();
+      tinfo->current_time_thread_
+          = GetTimesFromClock (CLOCK_THREAD_CPUTIME_ID);
+      tinfo->current_time_ = GetTimesFromClock (CLOCK_MONOTONIC);
       sigset_t unblock_set;
       sigemptyset (&unblock_set);
-      sigaddset (&unblock_set, SIGPROF);
+      sigaddset (&unblock_set, SIGALRM);
       sigprocmask (SIG_UNBLOCK, &unblock_set, 0);
       tinfo->blocked_ = false;
     }
@@ -237,7 +239,7 @@ MyHandler (int, siginfo_t *, void *context)
     {
       // block this signal if it does not belong to
       // the profiling threads.
-      sigaddset (&static_cast<ucontext *> (context)->uc_sigmask, SIGPROF);
+      sigaddset (&static_cast<ucontext *> (context)->uc_sigmask, SIGALRM);
       return;
     }
   uint64_t old_time = tinfo->current_time_;
@@ -245,8 +247,9 @@ MyHandler (int, siginfo_t *, void *context)
 
   uint64_t old_time_thread = tinfo->current_time_thread_;
   uint64_t &current_time_thread = tinfo->current_time_thread_;
-  current_time_thread += ticks * frequency;
-  current_time = GetTimesFromClock ();
+  // update current times
+  current_time_thread = GetTimesFromClock (CLOCK_THREAD_CPUTIME_ID);
+  current_time = GetTimesFromClock (CLOCK_MONOTONIC);
 
   if (tinfo->stack_end_ >= ThreadInfo::MAX_STACK)
     {
@@ -274,8 +277,8 @@ MyHandler (int, siginfo_t *, void *context)
       tinfo->idle_times_++;
       if (tinfo->idle_times_ >= max_idle_times)
         {
-          // will block SIGPROF
-          sigaddset (&static_cast<ucontext *> (context)->uc_sigmask, SIGPROF);
+          // will block SIGALRM
+          sigaddset (&static_cast<ucontext *> (context)->uc_sigmask, SIGALRM);
           tinfo->SetBlocked ();
           tinfo->idle_times_ = 0;
         }
@@ -310,12 +313,12 @@ struct Initializer
     struct itimerval timer;
     myaction.sa_sigaction = MyHandler;
     myaction.sa_flags = SA_SIGINFO;
-    sigaction (SIGPROF, &myaction, NULL);
+    sigaction (SIGALRM, &myaction, NULL);
 
     timer.it_value.tv_sec = 0;
     timer.it_value.tv_usec = frequency;
     timer.it_interval = timer.it_value;
-    setitimer (ITIMER_PROF, &timer, NULL);
+    setitimer (ITIMER_REAL, &timer, NULL);
     file_to_write = fopen (CTRACE_FILE_NAME, "w");
     fprintf (file_to_write, "{\"traceEvents\": [");
     pthread_t my_writer_thread;
