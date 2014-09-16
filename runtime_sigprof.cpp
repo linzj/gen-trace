@@ -104,10 +104,11 @@ struct ThreadInfo
   int idle_times_;
   bool blocked_;
   ThreadInfo ();
+  void UpdateCurrentTime ();
+  void UpdateCurrentTimeThread ();
   void SetBlocked ();
   static ThreadInfo *New ();
   static ThreadInfo *Find ();
-  static ThreadInfo *Find (const int);
 };
 
 static const int MAX_THREADS = 100;
@@ -131,6 +132,18 @@ ThreadInfo *
 ThreadInfo::Find ()
 {
   return static_cast<ThreadInfo *> (pthread_getspecific (thread_info_key));
+}
+
+void
+ThreadInfo::UpdateCurrentTime ()
+{
+  current_time_ = GetTimesFromClock (CLOCK_MONOTONIC);
+}
+
+void
+ThreadInfo::UpdateCurrentTimeThread ()
+{
+  current_time_thread_ = GetTimesFromClock (CLOCK_THREAD_CPUTIME_ID);
 }
 
 ThreadInfo *
@@ -202,9 +215,8 @@ GetThreadInfo ()
   ThreadInfo *tinfo = _GetThreadInfo ();
   if (tinfo->blocked_)
     {
-      tinfo->current_time_thread_
-          = GetTimesFromClock (CLOCK_THREAD_CPUTIME_ID);
-      tinfo->current_time_ = GetTimesFromClock (CLOCK_MONOTONIC);
+      tinfo->UpdateCurrentTime ();
+      tinfo->UpdateCurrentTimeThread ();
       sigset_t unblock_set;
       sigemptyset (&unblock_set);
       sigaddset (&unblock_set, SIGALRM);
@@ -243,13 +255,12 @@ MyHandler (int, siginfo_t *, void *context)
       return;
     }
   uint64_t old_time = tinfo->current_time_;
-  uint64_t &current_time = tinfo->current_time_;
+  tinfo->UpdateCurrentTime ();
+  uint64_t current_time = tinfo->current_time_;
 
   uint64_t old_time_thread = tinfo->current_time_thread_;
-  uint64_t &current_time_thread = tinfo->current_time_thread_;
-  // update current times
-  current_time_thread = GetTimesFromClock (CLOCK_THREAD_CPUTIME_ID);
-  current_time = GetTimesFromClock (CLOCK_MONOTONIC);
+  tinfo->UpdateCurrentTimeThread ();
+  uint64_t current_time_thread = tinfo->current_time_thread_;
 
   if (tinfo->stack_end_ >= ThreadInfo::MAX_STACK)
     {
@@ -459,6 +470,13 @@ __start_ctrace__ (void *c, const char *name)
     return;
   CTraceStruct *cs = new (c) CTraceStruct (name);
   ThreadInfo *tinfo = GetThreadInfo ();
+  if (tinfo->stack_end_ == 0)
+    {
+      // always update the time in the first entry.
+      // Or if it sleep too long, will make this entry looks
+      // very time consuming.
+      tinfo->UpdateCurrentTime ();
+    }
   if (tinfo->stack_end_ < ThreadInfo::MAX_STACK)
     {
       tinfo->stack_[tinfo->stack_end_] = cs;
