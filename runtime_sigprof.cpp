@@ -33,7 +33,7 @@ namespace
 pthread_key_t thread_info_key;
 FILE *file_to_write;
 static const uint64_t invalid_time = static_cast<uint64_t> (-1);
-static const int frequency = 1000;
+static const int frequency = 100;
 static const int ticks = 1;
 static const int max_idle_times = 1000;
 
@@ -94,10 +94,10 @@ struct CTraceStruct
 
 struct ThreadInfo
 {
-  static const int MAX_STACK = frequency;
+  static const int max_stack = 1000;
   int pid_;
   int tid_;
-  CTraceStruct *stack_[MAX_STACK];
+  CTraceStruct *stack_[max_stack];
   int stack_end_;
   uint64_t current_time_;
   uint64_t current_time_thread_;
@@ -263,7 +263,7 @@ MyHandler (int, siginfo_t *, void *context)
   tinfo->UpdateCurrentTimeThread ();
   uint64_t current_time_thread = tinfo->current_time_thread_;
 
-  if (tinfo->stack_end_ >= ThreadInfo::MAX_STACK)
+  if (tinfo->stack_end_ >= ThreadInfo::max_stack)
     {
       CRASH ();
     }
@@ -478,7 +478,7 @@ __start_ctrace__ (void *c, const char *name)
       // very time consuming.
       tinfo->UpdateCurrentTime ();
     }
-  if (tinfo->stack_end_ < ThreadInfo::MAX_STACK)
+  if (tinfo->stack_end_ < ThreadInfo::max_stack)
     {
       tinfo->stack_[tinfo->stack_end_] = cs;
     }
@@ -492,10 +492,15 @@ __end_ctrace__ (CTraceStruct *c, const char *name)
     return;
   ThreadInfo *tinfo = GetThreadInfo ();
   tinfo->stack_end_--;
-  if (tinfo->stack_end_ < ThreadInfo::MAX_STACK)
+  if (tinfo->stack_end_ < ThreadInfo::max_stack)
     {
       if (c->start_time_ != invalid_time)
         {
+          if (tinfo->stack_end_ == 0)
+            {
+              tinfo->UpdateCurrentTime ();
+              c->min_end_time_ = tinfo->current_time_ + ticks;
+            }
           // we should record this
           RecordThis (c, tinfo);
           if (tinfo->stack_end_ != 0)
