@@ -17,10 +17,11 @@ How to use
 ```    
     g++ -I <where your plugin includes reside> -fno-rtti -fPIC -shared -o gentrace.so plugin.cpp
 ```
-To find where the plugin includes reside, you needs to install the dev header of your GCC. To do that on Ubuntu if you are using GCC version 4.8:
+To find where the plugin includes reside, you needs to install the dev header of your GCC. This plugin requires the header of GCC 4.9. To do that on Ubuntu:
 ```
-apt-get install gcc-4.8-plugin-dev
+apt-get install gcc-5.0-plugin-dev
 ```
+But 4.9 may not in the apt of Ubuntu, so you may still need to download the source and compile GCC. After make install phase, you will get all the plugin headers that required.
  2. Compile the runtime of the profiler.
  Currently the runtime is tested on android machines. So you may define your own output path.
 ```
@@ -51,8 +52,8 @@ FAQ
 ```
     echo ']}' >> <yout file>
 ```
-3.
-
+3. 
+    
 
 **Just Enjoy It**.
 
