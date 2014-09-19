@@ -19,7 +19,7 @@ How to use
 ```
 To find where the plugin includes reside, you needs to install the dev header of your GCC. This plugin requires the header of GCC 4.9. To do that on Ubuntu:
 ```
-apt-get install gcc-5.0-plugin-dev
+apt-get install gcc-4.9-plugin-dev
 ```
 But 4.9 may not in the apt of Ubuntu, so you may still need to download the source and compile GCC. After make install phase, you will get all the plugin headers that required.
  2. Compile the runtime of the profiler.
@@ -52,8 +52,7 @@ FAQ
 ```
     echo ']}' >> <yout file>
 ```
-3. 
-    
+3.
 
 **Just Enjoy It**.
 
