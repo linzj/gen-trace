@@ -134,6 +134,8 @@ ThreadInfo::Find ()
   return static_cast<ThreadInfo *> (pthread_getspecific (thread_info_key));
 }
 
+uint64_t GetTimesFromClock (int clockid);
+
 void
 ThreadInfo::UpdateCurrentTime ()
 {
