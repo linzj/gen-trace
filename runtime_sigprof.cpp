@@ -221,7 +221,7 @@ GetThreadInfo ()
       tinfo->UpdateCurrentTimeThread ();
       sigset_t unblock_set;
       sigemptyset (&unblock_set);
-      sigaddset (&unblock_set, SIGALRM);
+      sigaddset (&unblock_set, SIGPROF);
       sigprocmask (SIG_UNBLOCK, &unblock_set, 0);
       tinfo->blocked_ = false;
     }
@@ -253,7 +253,7 @@ MyHandler (int, siginfo_t *, void *context)
     {
       // block this signal if it does not belong to
       // the profiling threads.
-      sigaddset (&static_cast<ucontext *> (context)->uc_sigmask, SIGALRM);
+      sigaddset (&static_cast<ucontext *> (context)->uc_sigmask, SIGPROF);
       return;
     }
   uint64_t old_time = tinfo->current_time_;
@@ -290,8 +290,8 @@ MyHandler (int, siginfo_t *, void *context)
       tinfo->idle_times_++;
       if (tinfo->idle_times_ >= max_idle_times)
         {
-          // will block SIGALRM
-          sigaddset (&static_cast<ucontext *> (context)->uc_sigmask, SIGALRM);
+          // will block SIGPROF
+          sigaddset (&static_cast<ucontext *> (context)->uc_sigmask, SIGPROF);
           tinfo->SetBlocked ();
           tinfo->idle_times_ = 0;
         }
@@ -326,12 +326,12 @@ struct Initializer
     struct itimerval timer;
     myaction.sa_sigaction = MyHandler;
     myaction.sa_flags = SA_SIGINFO;
-    sigaction (SIGALRM, &myaction, NULL);
+    sigaction (SIGPROF, &myaction, NULL);
 
     timer.it_value.tv_sec = 0;
     timer.it_value.tv_usec = frequency;
     timer.it_interval = timer.it_value;
-    setitimer (ITIMER_REAL, &timer, NULL);
+    setitimer (ITIMER_PROF, &timer, NULL);
     file_to_write = fopen (CTRACE_FILE_NAME, "w");
     fprintf (file_to_write, "{\"traceEvents\": [");
     pthread_t my_writer_thread;
