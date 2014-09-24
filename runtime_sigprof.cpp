@@ -121,8 +121,6 @@ struct FreeListNode
 
 FreeListNode *free_head;
 
-uint64_t GetTimesFromClock ();
-
 void
 ThreadInfo::SetBlocked ()
 {
@@ -136,16 +134,18 @@ ThreadInfo::Find ()
   return static_cast<ThreadInfo *> (pthread_getspecific (thread_info_key));
 }
 
+uint64_t GetTimesFromClock (int clockid);
+
 void
 ThreadInfo::UpdateCurrentTime ()
 {
-  current_time_ = GetTimesFromClock ();
+  current_time_ = GetTimesFromClock (CLOCK_MONOTONIC);
 }
 
 void
 ThreadInfo::UpdateCurrentTimeThread ()
 {
-  current_time_thread_ += ticks * frequency;
+  current_time_thread_ = GetTimesFromClock (CLOCK_THREAD_CPUTIME_ID);
 }
 
 ThreadInfo *
@@ -175,7 +175,7 @@ ThreadInfo::ThreadInfo ()
   tid_ = syscall (__NR_gettid, 0);
   stack_end_ = 0;
   idle_times_ = 0;
-  current_time_thread_ = 0;
+  current_time_ = 0;
   blocked_ = true;
 }
 
@@ -196,7 +196,7 @@ _GetThreadInfo ()
 }
 
 uint64_t
-GetTimesFromClock ()
+GetTimesFromClock (int clockid)
 {
   static const int64_t kMillisecondsPerSecond = 1000;
   static const int64_t kMicrosecondsPerMillisecond = 1000;
@@ -205,7 +205,7 @@ GetTimesFromClock ()
   static const int64_t kNanosecondsPerMicrosecond = 1000;
 
   struct timespec ts_thread;
-  clock_gettime (CLOCK_MONOTONIC, &ts_thread);
+  clock_gettime (clockid, &ts_thread);
   return (static_cast<uint64_t> (ts_thread.tv_sec) * kMicrosecondsPerSecond)
          + (static_cast<uint64_t> (ts_thread.tv_nsec)
             / kNanosecondsPerMicrosecond);
@@ -218,6 +218,7 @@ GetThreadInfo ()
   if (tinfo->blocked_)
     {
       tinfo->UpdateCurrentTime ();
+      tinfo->UpdateCurrentTimeThread ();
       sigset_t unblock_set;
       sigemptyset (&unblock_set);
       sigaddset (&unblock_set, SIGPROF);
