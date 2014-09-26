@@ -16,7 +16,7 @@
 #include <new>
 
 #ifndef CTRACE_FILE_NAME
-#define CTRACE_FILE_NAME "/sdcard/trace.json"
+#define CTRACE_FILE_NAME "/sdcard/trace_%d.json"
 #endif // CTRACE_FILE_NAME
 #define CRASH()                                                               \
   do                                                                          \
@@ -332,7 +332,9 @@ struct Initializer
     timer.it_value.tv_usec = frequency;
     timer.it_interval = timer.it_value;
     setitimer (ITIMER_PROF, &timer, NULL);
-    file_to_write = fopen (CTRACE_FILE_NAME, "w");
+    char buffer[256];
+    sprintf (buffer, CTRACE_FILE_NAME, getpid ());
+    file_to_write = fopen (buffer, "w");
     fprintf (file_to_write, "{\"traceEvents\": [");
     pthread_t my_writer_thread;
     pthread_create (&my_writer_thread, NULL, WriterThread, NULL);
