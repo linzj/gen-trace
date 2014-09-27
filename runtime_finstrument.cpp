@@ -18,7 +18,7 @@
 #include <new>
 
 #ifndef CTRACE_FILE_NAME
-#define CTRACE_FILE_NAME "/sdcard/trace_%d.json"
+#define CTRACE_FILE_NAME "trace_%d.json"
 #endif // CTRACE_FILE_NAME
 #define CRASH()                                                               \
   do                                                                          \
@@ -509,7 +509,7 @@ DoWriteRecursive (struct Record *current)
   if (current->next_)
     DoWriteRecursive (current->next_);
 
-  fwrite (&current, sizeof (*current) - sizeof (void *), 1, file_to_write);
+  fwrite (current, sizeof (*current) - sizeof (void *), 1, file_to_write);
   static int flushCount = 0;
   if (flushCount++ == 5)
     {
