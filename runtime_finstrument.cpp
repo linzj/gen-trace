@@ -5,6 +5,8 @@
 #include <time.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
+#include <errno.h>
 #include <assert.h>
 // POSIX Headers
 #include <unistd.h>
@@ -88,8 +90,9 @@ struct CTraceStruct
   uint64_t min_end_time_;
   uint64_t start_time_thread_;
   uint64_t min_end_time_thread_;
-  const char *name_;
-  CTraceStruct (const char *);
+  uint64_t name_;
+  CTraceStruct (void *);
+  CTraceStruct () {}
 };
 
 struct ThreadInfo
@@ -97,7 +100,7 @@ struct ThreadInfo
   static const int max_stack = 1000;
   int pid_;
   int tid_;
-  CTraceStruct *stack_[max_stack];
+  CTraceStruct stack_[max_stack];
   int stack_end_;
   uint64_t current_time_;
   uint64_t current_time_thread_;
@@ -107,6 +110,8 @@ struct ThreadInfo
   void UpdateCurrentTime ();
   void UpdateCurrentTimeThread ();
   void SetBlocked ();
+  void NewBack (void *);
+  CTraceStruct *PoppedBack ();
   static ThreadInfo *New ();
   static ThreadInfo *Find ();
 };
@@ -120,6 +125,28 @@ struct FreeListNode
 };
 
 FreeListNode *free_head;
+
+struct Record
+{
+  int pid_;
+  int tid_;
+  uint64_t start_time_;
+  uint64_t dur_;
+  uint64_t start_time_thread_;
+  uint64_t dur_thread_;
+  uint64_t name_;
+  struct Record *next_;
+};
+
+struct Lock
+{
+  Lock (pthread_mutex_t *mutex) : mutex_ (mutex)
+  {
+    pthread_mutex_lock (mutex_);
+  }
+  ~Lock () { pthread_mutex_unlock (mutex_); }
+  pthread_mutex_t *mutex_;
+};
 
 void
 ThreadInfo::SetBlocked ()
@@ -179,10 +206,24 @@ ThreadInfo::ThreadInfo ()
   blocked_ = true;
 }
 
-CTraceStruct::CTraceStruct (const char *name)
+void
+ThreadInfo::NewBack (void *name)
+{
+  assert (stack_end_ < MAX_THREADS);
+  CTraceStruct *cs = &stack_[stack_end_];
+  new (cs) CTraceStruct (name);
+}
+
+CTraceStruct *
+ThreadInfo::PoppedBack ()
+{
+  return &stack_[stack_end_];
+}
+
+CTraceStruct::CTraceStruct (void *name)
 {
   start_time_ = invalid_time;
-  name_ = name;
+  name_ = reinterpret_cast<uint64_t> (name);
 }
 
 ThreadInfo *
@@ -271,7 +312,7 @@ MyHandler (int, siginfo_t *, void *context)
   for (int i = 0; i < tinfo->stack_end_;
        ++i, old_time += ticks, old_time_thread += ticks)
     {
-      CTraceStruct *cur = tinfo->stack_[i];
+      CTraceStruct *cur = &tinfo->stack_[i];
       if (cur->start_time_ != invalid_time)
         continue;
       cur->start_time_ = old_time;
@@ -279,11 +320,11 @@ MyHandler (int, siginfo_t *, void *context)
     }
   if (tinfo->stack_end_ != 0)
     {
-      tinfo->stack_[tinfo->stack_end_ - 1]->min_end_time_thread_
+      tinfo->stack_[tinfo->stack_end_ - 1].min_end_time_thread_
           = current_time_thread + ticks;
 
-      tinfo->stack_[tinfo->stack_end_ - 1]->min_end_time_ = current_time
-                                                            + ticks;
+      tinfo->stack_[tinfo->stack_end_ - 1].min_end_time_ = current_time
+                                                           + ticks;
     }
   else
     {
@@ -318,6 +359,21 @@ struct Initializer
       }
   }
 
+  class MapLineData
+  {
+  public:
+    MapLineData (char *str);
+
+    intptr_t getBase ();
+    intptr_t getEnd ();
+
+  private:
+    intptr_t m_base;
+    intptr_t m_end;
+  };
+
+  static void StartFile (FILE *f);
+
   Initializer ()
   {
     pthread_key_create (&thread_info_key, DeleteThreadInfo);
@@ -334,8 +390,8 @@ struct Initializer
     setitimer (ITIMER_PROF, &timer, NULL);
     char buffer[256];
     sprintf (buffer, CTRACE_FILE_NAME, getpid ());
-    file_to_write = fopen (buffer, "w");
-    fprintf (file_to_write, "{\"traceEvents\": [");
+    file_to_write = fopen (buffer, "wb");
+    StartFile (file_to_write);
     pthread_t my_writer_thread;
     pthread_create (&my_writer_thread, NULL, WriterThread, NULL);
   }
@@ -343,29 +399,81 @@ struct Initializer
   ~Initializer () { fclose (file_to_write); }
 };
 
+Initializer::MapLineData::MapLineData (char *str) : m_base (-1)
+{
+  int len = strlen (str);
+  // strip the '\n'
+  str[len - 1] = '\0';
+
+  char *address_sep = strchr (str, '-');
+  if (!address_sep)
+    {
+      return;
+    }
+  address_sep[0] = '\0';
+  errno = 0;
+  m_base = strtoll (str, NULL, 16);
+  if (errno)
+    {
+      m_base = -1;
+      return;
+    }
+  str = address_sep + 1;
+  char *space = strchr (str, ' ');
+  if (!space)
+    {
+      return;
+    }
+  space[0] = '\0';
+  errno = 0;
+  m_end = strtoll (str, NULL, 16);
+  if (errno)
+    {
+      m_end = -1;
+      return;
+    }
+}
+
+intptr_t
+Initializer::MapLineData::getBase ()
+{
+  return m_base;
+}
+
+intptr_t
+Initializer::MapLineData::getEnd ()
+{
+  return m_end;
+}
+
+void
+Initializer::StartFile (FILE *f)
+{
+  char sz[1024] = "/proc/self/maps";
+  FILE *fp = fopen (sz, "r");
+  if (!fp)
+    {
+      return;
+    }
+  intptr_t return_address
+      = reinterpret_cast<intptr_t> (__builtin_return_address (0));
+  while (fgets (sz, 1024, fp))
+    {
+      MapLineData data (sz);
+      if (data.getBase () <= return_address && data.getEnd () > return_address)
+        {
+          Record r
+              = { 0, 0, 0, 0, 0, 0, static_cast<uint64_t> (data.getBase ()) };
+          fwrite (&r, sizeof (r) - sizeof (void *), 1, f);
+          fflush (f);
+          fclose (fp);
+          return;
+        }
+    }
+  __builtin_unreachable ();
+}
+
 Initializer __init__;
-
-struct Record
-{
-  int pid_;
-  int tid_;
-  uint64_t start_time_;
-  uint64_t dur_;
-  uint64_t start_time_thread_;
-  uint64_t dur_thread_;
-  const char *name_;
-  struct Record *next_;
-};
-
-struct Lock
-{
-  Lock (pthread_mutex_t *mutex) : mutex_ (mutex)
-  {
-    pthread_mutex_lock (mutex_);
-  }
-  ~Lock () { pthread_mutex_unlock (mutex_); }
-  pthread_mutex_t *mutex_;
-};
 
 void
 RecordThis (CTraceStruct *c, ThreadInfo *tinfo)
@@ -401,22 +509,7 @@ DoWriteRecursive (struct Record *current)
   if (current->next_)
     DoWriteRecursive (current->next_);
 
-  static bool needComma = false;
-  if (!needComma)
-    {
-      needComma = true;
-    }
-  else
-    {
-      fprintf (file_to_write, ", ");
-    }
-  fprintf (file_to_write,
-           "{\"cat\":\"%s\", \"pid\":%d, \"tid\":%d, \"ts\":%" PRIu64 ", "
-           "\"ph\":\"X\", \"name\":\"%s\", \"dur\": %" PRIu64
-           ", \"tts\":%" PRIu64 ", \"tdur\":%" PRIu64 "}",
-           "profile", current->pid_, current->tid_, current->start_time_,
-           current->name_, current->dur_, current->start_time_thread_,
-           current->dur_thread_);
+  fwrite (&current, sizeof (*current) - sizeof (void *), 1, file_to_write);
   static int flushCount = 0;
   if (flushCount++ == 5)
     {
@@ -463,16 +556,15 @@ WriterThread (void *)
 }
 
 extern "C" {
-extern void __start_ctrace__ (void *c, const char *name);
-extern void __end_ctrace__ (CTraceStruct *c, const char *name);
+void __cyg_profile_func_enter (void *this_fn, void *call_site);
+void __cyg_profile_func_exit (void *this_fn, void *call_site);
 }
 
 void
-__start_ctrace__ (void *c, const char *name)
+__cyg_profile_func_enter (void *this_fn, void *call_site)
 {
   if (file_to_write == 0)
     return;
-  CTraceStruct *cs = new (c) CTraceStruct (name);
   ThreadInfo *tinfo = GetThreadInfo ();
   if (tinfo->stack_end_ == 0)
     {
@@ -483,13 +575,13 @@ __start_ctrace__ (void *c, const char *name)
     }
   if (tinfo->stack_end_ < ThreadInfo::max_stack)
     {
-      tinfo->stack_[tinfo->stack_end_] = cs;
+      tinfo->NewBack (this_fn);
     }
   tinfo->stack_end_++;
 }
 
 void
-__end_ctrace__ (CTraceStruct *c, const char *name)
+__cyg_profile_func_exit (void *this_fn, void *call_site)
 {
   if (file_to_write == 0)
     return;
@@ -497,6 +589,8 @@ __end_ctrace__ (CTraceStruct *c, const char *name)
   tinfo->stack_end_--;
   if (tinfo->stack_end_ < ThreadInfo::max_stack)
     {
+      assert (tinfo->stack_end_ >= 0);
+      CTraceStruct *c = tinfo->PoppedBack ();
       if (c->start_time_ != invalid_time)
         {
           if (tinfo->stack_end_ == 0)
@@ -509,9 +603,9 @@ __end_ctrace__ (CTraceStruct *c, const char *name)
           if (tinfo->stack_end_ != 0)
             {
               // propagate the back's mini end time
-              tinfo->stack_[tinfo->stack_end_ - 1]->min_end_time_
+              tinfo->stack_[tinfo->stack_end_ - 1].min_end_time_
                   = c->min_end_time_ + ticks;
-              tinfo->stack_[tinfo->stack_end_ - 1]->min_end_time_thread_
+              tinfo->stack_[tinfo->stack_end_ - 1].min_end_time_thread_
                   = c->min_end_time_thread_ + ticks;
               tinfo->current_time_ += ticks;
               tinfo->current_time_thread_ += ticks;
