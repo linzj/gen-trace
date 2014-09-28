@@ -35,7 +35,7 @@ namespace
 pthread_key_t thread_info_key;
 FILE *file_to_write;
 static const uint64_t invalid_time = static_cast<uint64_t> (-1);
-static const int frequency = 100;
+static const int frequency = 1;
 static const int ticks = 1;
 static const int max_idle_times = 1000;
 
@@ -209,7 +209,7 @@ ThreadInfo::ThreadInfo ()
 void
 ThreadInfo::NewBack (void *name)
 {
-  assert (stack_end_ < MAX_THREADS);
+  assert (stack_end_ < max_stack);
   CTraceStruct *cs = &stack_[stack_end_];
   new (cs) CTraceStruct (name);
 }

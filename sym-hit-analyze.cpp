@@ -12,6 +12,7 @@
 
 using namespace std;
 static const int BITS_PER_BYTE = 8;
+static bool zero_base = false;
 struct Record
 {
   int pid_;
@@ -109,7 +110,7 @@ find_function_name (uint64_t base, const Record &r,
       return i->m_sym;
     }
   else
-    throw function_name_exception ();
+    return "Unknown function";
 }
 
 static void
@@ -119,6 +120,8 @@ handle_data_file (ifstream &data_file, ofstream &data_file_out,
   Record r;
   read_a_record (r, data_file);
   uint64_t base = r.name_;
+  if (zero_base)
+    base = 0;
   // init the data_file_out
   data_file_out << "{\"traceEvents\": [";
   bool needComma = false;
@@ -159,11 +162,16 @@ handle_data_file (ifstream &data_file, ofstream &data_file_out,
 int
 main (int argc, char **argv)
 {
-  if (argc != 3)
+  if (argc < 3)
     {
       cerr << "usage : <data file> <sym file as comment>" << endl;
       return 1;
     }
+  else if (argc > 3)
+    {
+      zero_base = true;
+    }
+
   RangeVector range_vector;
   {
     ifstream sym_file (argv[2]);
@@ -188,7 +196,7 @@ main (int argc, char **argv)
         istringstream iss (line);
         iss >> hex >> base;
         iss >> hex >> size;
-        iss >> sym;
+        getline (iss, sym);
 
         range_vector.push_back (Range (base, size, sym));
       }
