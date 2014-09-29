@@ -19,8 +19,6 @@ struct Record
   int tid_;
   uint64_t start_time_;
   uint64_t dur_;
-  uint64_t start_time_thread_;
-  uint64_t dur_thread_;
   uint64_t name_;
 };
 
@@ -104,7 +102,7 @@ find_function_name (uint64_t base, const Record &r,
   iterator i = lower_bound (range_vector.begin (), range_vector.end (), bound,
                             compare);
   if (i == range_vector.end ())
-    throw function_name_exception ();
+    return "Unknown function";
   if (i->m_base <= bound && i->m_base + i->m_size > bound)
     {
       return i->m_sym;
@@ -151,9 +149,7 @@ handle_data_file (ifstream &data_file, ofstream &data_file_out,
                     << ",\"pid\":" << r.pid_ << ",\"tid\":" << r.tid_
                     << ",\"ts\":" << r.start_time_ << ",\"ph\":\"X\""
                     << ",\"name\":\"" << function_name << "\""
-                    << ",\"dur\":" << r.dur_
-                    << ",\"tts\":" << r.start_time_thread_
-                    << ",\"tdur\":" << r.dur_thread_ << "}";
+                    << ",\"dur\":" << r.dur_ << "}";
     }
 }
 
