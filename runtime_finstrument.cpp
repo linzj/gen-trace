@@ -104,6 +104,7 @@ struct ThreadInfo
   bool blocked_;
   timer_t timerid_;
   ThreadInfo ();
+  ~ThreadInfo ();
   void UpdateCurrentTime ();
   void SetBlocked ();
   void NewBack (void *);
@@ -200,6 +201,8 @@ ThreadInfo::ThreadInfo ()
   timerid_ = 0;
 }
 
+ThreadInfo::~ThreadInfo () { timer_delete (timerid_); }
+
 void
 ThreadInfo::NewBack (void *name)
 {
@@ -269,6 +272,7 @@ GetThreadInfo ()
 void
 DeleteThreadInfo (void *tinfo)
 {
+  static_cast<ThreadInfo *> (tinfo)->~ThreadInfo ();
   FreeListNode *free_node = static_cast<FreeListNode *> (tinfo);
   while (true)
     {
