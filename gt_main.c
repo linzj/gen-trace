@@ -28,8 +28,10 @@
    The GNU General Public License is contained in the file COPYING.
 */
 
+#include "valgrind.h"
 #include "pub_tool_basics.h"
 #include "pub_tool_tooliface.h"
+#include "pub_tool_libcprint.h"
 
 static void
 gt_post_clo_init (void)
@@ -42,15 +44,18 @@ gt_instrument (VgCallbackClosure *closure, IRSB *sbIn, VexGuestLayout *layout,
                IRType gWordTy, IRType hWordTy)
 {
   int i = 0;
+  VG_ (printf)("sb begins\n");
+
   for (/*use current i*/; i < sbIn->stmts_used; i++)
     {
-
+      IRStmt *st;
       st = sbIn->stmts[i];
       VG_ (printf)("   pass  ");
       ppIRStmt (st);
       VG_ (printf)("\n");
     }
-  return bb;
+  VG_ (printf)("sb ends\n");
+  return sbIn;
 }
 
 static void
