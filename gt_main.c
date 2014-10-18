@@ -168,7 +168,7 @@ thread_info_pop (struct ThreadInfo *info, const HChar *fnname)
   // work around c++ throw
   if (VG_ (strcmp)(target->name_, fnname))
     {
-      // VG_ (printf)(" and watsted by %s\n", fnname);
+      // VG_ (printf)(" and get wasted by %s\n", fnname);
       return thread_info_pop (info, fnname);
     }
   // VG_ (printf)("\n");
@@ -350,7 +350,6 @@ gt_instrument (VgCallbackClosure *closure, IRSB *sbIn, VexGuestLayout *layout,
                VexGuestExtents *vge, VexArchInfo *archinfo_host,
                IRType gWordTy, IRType hWordTy)
 {
-  Bool bIMarkMet = False;
   IRSB *sbOut;
   int i = 0;
   Addr64 cia = 0;
@@ -409,24 +408,20 @@ gt_instrument (VgCallbackClosure *closure, IRSB *sbIn, VexGuestLayout *layout,
             cia = st->Ist.IMark.addr;
             // isize = st->Ist.IMark.len;
             // delta = st->Ist.IMark.delta;
-            if (!bIMarkMet)
+            if (VG_ (get_fnname_if_entry)(cia, buf, 256))
               {
-                if (VG_ (get_fnname_if_entry)(cia, buf, 256))
-                  {
-                    // VG_ (printf)("found fnname %s at %08x\n", buf, cia);
-                    // handle code injection here
-                    IRExpr *addr;
-                    IRDirty *di;
-                    IRExpr **argv;
+                // VG_ (printf)("found fnname %s at %08x\n", buf, cia);
+                // handle code injection here
+                IRExpr *addr;
+                IRDirty *di;
+                IRExpr **argv;
 
-                    addr = mkIRExpr_HWord (cia);
-                    argv = mkIRExprVec_1 (addr);
-                    di = unsafeIRDirty_0_N (
-                        1, "guest_call_entry",
-                        VG_ (fnptr_to_fnentry)(guest_call_entry), argv);
-                    addStmtToIRSB (sbOut, IRStmt_Dirty (di));
-                    bIMarkMet = True;
-                  }
+                addr = mkIRExpr_HWord (cia);
+                argv = mkIRExprVec_1 (addr);
+                di = unsafeIRDirty_0_N (
+                    1, "guest_call_entry",
+                    VG_ (fnptr_to_fnentry)(guest_call_entry), argv);
+                addStmtToIRSB (sbOut, IRStmt_Dirty (di));
               }
             if (sbIn->jumpkind == Ijk_Ret && i == last_imark)
               {
