@@ -44,17 +44,30 @@ gt_instrument (VgCallbackClosure *closure, IRSB *sbIn, VexGuestLayout *layout,
                IRType gWordTy, IRType hWordTy)
 {
   int i = 0;
-  VG_ (printf)("sb begins\n");
+  // VG_ (printf)("sb begins\n");
 
   for (/*use current i*/; i < sbIn->stmts_used; i++)
     {
       IRStmt *st;
       st = sbIn->stmts[i];
-      VG_ (printf)("   pass  ");
-      ppIRStmt (st);
-      VG_ (printf)("\n");
+      switch (st->tag)
+        {
+        case Ist_IMark:
+          {
+            Addr64 cia = st->Ist.IMark.addr + st->Ist.IMark.delta;
+            Int isize = st->Ist.IMark.len;
+            HChar buf[256];
+            if (VG_ (get_fnname_if_entry)(cia, buf, 256))
+              {
+                VG_ (printf)("found fnname %s\n", buf);
+              }
+          }
+        }
+      // VG_ (printf)("   pass  ");
+      // ppIRStmt (st);
+      // VG_ (printf)("\n");
     }
-  VG_ (printf)("sb ends\n");
+  // VG_ (printf)("sb ends\n");
   return sbIn;
 }
 
