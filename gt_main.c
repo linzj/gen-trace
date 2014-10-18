@@ -126,10 +126,9 @@ GetTimesFromClock (int clockid)
   static const int64_t kNanosecondsPerMicrosecond = 1000;
 
   extern SysRes VG_ (do_syscall)(UWord sysno, UWord, UWord, UWord, UWord,
-                                 UWord, UWord, UWord, UWord, UWord, UWord,
-                                 UWord, UWord);
+                                 UWord, UWord, UWord, UWord);
   VG_ (do_syscall)(__NR_clock_gettime, clockid, (UWord)&ts_thread, 0, 0, 0, 0,
-                   0, 0, 0, 0, 0, 0);
+                   0, 0);
   ret = ((int64_t)(ts_thread.tv_sec) * kMicrosecondsPerSecond)
         + ((int64_t)(ts_thread.tv_nsec) / kNanosecondsPerMicrosecond);
   return ret;
@@ -142,7 +141,7 @@ struct CTraceStruct
   HChar *name_;
 };
 
-#define MAX_STACK (100)
+#define MAX_STACK (1000)
 struct ThreadInfo
 {
   int pid_;
@@ -220,6 +219,8 @@ DoWriteRecursive (int file_to_write, struct Record *current)
 
   for (; i >= 0; --i)
     {
+      const char *name;
+      char name_buf[64];
       if (!needComma)
         {
           needComma = True;
@@ -230,12 +231,21 @@ DoWriteRecursive (int file_to_write, struct Record *current)
         }
       current = *(struct Record **)VG_ (indexXA)(array, i);
       int size;
+      if (VG_ (strlen (current->name_)) >= 64)
+        {
+          VG_ (memcpy)(name_buf, current->name_, 63);
+          name_buf[63] = 0;
+        }
+      else
+        {
+          name = current->name_;
+        }
       size = VG_ (snprintf)(
           buf, 256,
           "{\"cat\":\"%s\", \"pid\":%d, \"tid\":%d, \"ts\":%" PRId64 ", "
           "\"ph\":\"X\", \"name\":\"%s\", \"dur\": %" PRId64 "}",
-          "profile", current->pid_, current->tid_, current->start_time_,
-          current->name_, current->dur_);
+          "profile", current->pid_, current->tid_, current->start_time_, name,
+          current->dur_);
       VG_ (write)(file_to_write, buf, size);
       VG_ (free)(current);
     }
@@ -245,7 +255,10 @@ DoWriteRecursive (int file_to_write, struct Record *current)
 static void
 ctrace_struct_submit (struct CTraceStruct *c, struct ThreadInfo *tinfo)
 {
-  struct Record *r = VG_ (malloc)("gentrace.record", sizeof (struct Record));
+  struct Record *r;
+  if (c->end_time_ - c->start_time_ <= 10)
+    return;
+  r = VG_ (malloc)("gentrace.record", sizeof (struct Record));
   r->pid_ = tinfo->pid_;
   r->tid_ = tinfo->tid_;
   r->start_time_ = c->start_time_;
@@ -336,6 +349,29 @@ gt_instrument (VgCallbackClosure *closure, IRSB *sbIn, VexGuestLayout *layout,
   Addr64 cia = 0;
   // Int isize;
   // VG_ (printf)("sb begins\n");
+  // ignore the ld.*so, libc.*so
+  {
+    DebugInfo *info;
+    info = VG_ (find_DebugInfo)(closure->nraddr);
+    if (info)
+      {
+        const HChar *so_name;
+        Bool should_return = False;
+        so_name = VG_ (DebugInfo_get_soname)(info);
+        if (VG_ (strstr)(so_name, ".so"))
+          {
+            if (VG_ (strstr)(so_name, "ld-linux") == so_name)
+              should_return = True;
+            else if (VG_ (strstr)(so_name, "libc") == so_name)
+              should_return = True;
+            else if (VG_ (strstr)(so_name, "libstdc++") == so_name)
+              should_return = True;
+          }
+        if (should_return)
+          return sbIn;
+      }
+  }
+
   sbOut = deepCopyIRSBExceptStmts (sbIn);
   for (/*use current i*/; i < sbIn->stmts_used; i++)
     {
@@ -408,10 +444,40 @@ gt_instrument (VgCallbackClosure *closure, IRSB *sbIn, VexGuestLayout *layout,
 }
 
 static void
+flush_thread_info (void)
+{
+  int i;
+
+  for (i = 0; i < MAX_THREAD_INFO; ++i)
+    {
+      struct ThreadInfo *info = &s_thread_info[i];
+      if (info->tid_ == 0)
+        break;
+      if (info->stack_end_ > 0)
+        {
+          int64_t end_time;
+
+          end_time = GetTimesFromClock (CLOCK_MONOTONIC);
+          if (info->stack_end_ > MAX_STACK)
+            info->stack_end_ = MAX_STACK;
+          while (info->stack_end_ > 0)
+            {
+              struct CTraceStruct *c = &info->stack_[--info->stack_end_];
+              c->end_time_ = end_time;
+              end_time += 10;
+              ctrace_struct_submit (c, info);
+            }
+        }
+    }
+}
+
+static void
 gt_fini (Int exitcode)
 {
   SysRes res;
   char buf[256];
+  // flush all thread info
+  flush_thread_info ();
 
   VG_ (snprintf)(buf, 256, "trace_%d.json", VG_ (getpid)());
   res = VG_ (open)(buf, VKI_O_CREAT | VKI_O_WRONLY, VKI_S_IRUSR | VKI_S_IWUSR);
