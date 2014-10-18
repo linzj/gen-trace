@@ -153,7 +153,6 @@ struct ThreadInfo
 #define MAX_THREAD_INFO (1000)
 struct ThreadInfo s_thread_info[MAX_THREAD_INFO];
 
-
 static struct CTraceStruct *
 thread_info_pop (struct ThreadInfo *info, const HChar *fnname)
 {
@@ -213,7 +212,7 @@ DoWriteRecursive (int file_to_write, struct Record *current)
   else
     {
       const char comma[] = ", ";
-      VG_ (write)(file_to_write, comma, sizeof (comma));
+      VG_ (write)(file_to_write, comma, sizeof (comma) - 1);
     }
   buf = alloca (256);
 
@@ -222,7 +221,7 @@ DoWriteRecursive (int file_to_write, struct Record *current)
                 "\"ph\":\"X\", \"name\":\"%s\", \"dur\": %" PRIu64 "}",
       "profile", current->pid_, current->tid_, current->start_time_,
       current->name_, current->dur_);
-  VG_ (write)(file_to_write, buf, size + 1);
+  VG_ (write)(file_to_write, buf, size);
 
   VG_ (free)(current);
 }
@@ -284,11 +283,11 @@ static VG_REGPARM (1) void guest_ret_entry (Addr64 addr)
   struct CTraceStruct *c;
   Bool ret = VG_ (get_fnname)(addr, buf, 256);
 
+  VG_ (printf)("at function return:%08llx:%s:%d\n", addr, buf, s_tid);
   if (ret != True)
     {
       return;
     }
-  VG_ (printf)("at function return:%08llx:%s:%d\n", addr, buf, s_tid);
   tinfo = get_thread_info ();
   if (!tinfo)
     return;
@@ -337,24 +336,24 @@ gt_instrument (VgCallbackClosure *closure, IRSB *sbIn, VexGuestLayout *layout,
             cia = st->Ist.IMark.addr;
             // isize = st->Ist.IMark.len;
             // delta = st->Ist.IMark.delta;
+            if (VG_ (get_fnname_if_entry)(cia, buf, 256))
+              {
+                // VG_ (printf)("found fnname %s at %08x\n", buf, cia);
+                // handle code injection here
+                IRExpr *addr;
+                IRDirty *di;
+                IRExpr **argv;
+
+                addr = mkIRExpr_HWord (cia);
+                argv = mkIRExprVec_1 (addr);
+                di = unsafeIRDirty_0_N (
+                    1, "guest_call_entry",
+                    VG_ (fnptr_to_fnentry)(guest_call_entry), argv);
+                addStmtToIRSB (sbOut, IRStmt_Dirty (di));
+              }
             if (!bIMarkMet)
               {
-                if (VG_ (get_fnname_if_entry)(cia, buf, 256))
-                  {
-                    // VG_ (printf)("found fnname %s at %08x\n", buf, cia);
-                    // handle code injection here
-                    IRExpr *addr;
-                    IRDirty *di;
-                    IRExpr **argv;
-
-                    addr = mkIRExpr_HWord (cia);
-                    argv = mkIRExprVec_1 (addr);
-                    di = unsafeIRDirty_0_N (
-                        1, "guest_call_entry",
-                        VG_ (fnptr_to_fnentry)(guest_call_entry), argv);
-                    addStmtToIRSB (sbOut, IRStmt_Dirty (di));
-                  }
-                else if (sbIn->jumpkind == Ijk_Ret)
+                if (sbIn->jumpkind == Ijk_Ret)
                   {
                     IRExpr *addr;
                     IRDirty *di;
@@ -378,9 +377,9 @@ gt_instrument (VgCallbackClosure *closure, IRSB *sbIn, VexGuestLayout *layout,
         {
           HChar buf[256];
           VG_ (get_fnname)(cia, buf, 256);
-          if (True)
+          if (VG_ (strcmp)(buf, "strcmp") == 0)
             {
-              VG_ (printf)("   pass  ");
+              VG_ (printf)("   pass  %s  ", buf);
               ppIRStmt (st);
               VG_ (printf)("\n");
             }
@@ -399,17 +398,16 @@ gt_fini (Int exitcode)
   char buf[256];
 
   VG_ (snprintf)(buf, 256, "trace_%d.json", VG_ (getpid)());
-  res = VG_ (open)(buf, VKI_O_WRONLY | VKI_O_TRUNC, 0);
-  if (sr_isError (res))
+  res = VG_ (open)(buf, VKI_O_CREAT | VKI_O_WRONLY, VKI_S_IRUSR | VKI_S_IWUSR);
+  if (!sr_isError (res))
     {
       int output;
       output = sr_Res (res);
       const char start[] = "{\"traceEvents\": [";
       const char end[] = "]}";
-      VG_ (printf)("writing trace file: %d", sizeof start);
-      VG_ (write)(output, start, sizeof (start));
+      VG_ (write)(output, start, sizeof (start) - 1);
       DoWriteRecursive (output, s_head);
-      VG_ (write)(output, end, sizeof (end));
+      VG_ (write)(output, end, sizeof (end) - 1);
       VG_ (close)(output);
     }
   VG_ (HT_destruct)(s_string_hash_table, VG_ (free));
