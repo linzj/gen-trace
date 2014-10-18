@@ -41,6 +41,7 @@
 #include "pub_tool_libcproc.h"
 #include "pub_tool_libcfile.h"
 #include "pub_tool_xarray.h"
+#include "pub_tool_threadstate.h"
 
 #include <stdint.h>
 #include <inttypes.h>
@@ -148,6 +149,7 @@ struct ThreadInfo
   int tid_;
   struct CTraceStruct stack_[MAX_STACK];
   int stack_end_;
+  HWord pop_if_not_same_func_;
 };
 
 #define MAX_THREAD_INFO (1000)
@@ -163,15 +165,17 @@ thread_info_pop (struct ThreadInfo *info, const HChar *fnname)
     return NULL;
 
   target = &info->stack_[info->stack_end_];
-  // VG_ (printf)("thread_info_pop: pop out target->name_ = %s",
-  // target->name_);
+  VG_ (printf)("thread_info_pop: pop out target->name_ = %s", target->name_);
   // work around c++ throw
-  if (VG_ (strcmp)(target->name_, fnname))
+  if (fnname)
     {
-      // VG_ (printf)(" and get wasted by %s\n", fnname);
-      return thread_info_pop (info, fnname);
+      if (VG_ (strcmp)(target->name_, fnname))
+        {
+          VG_ (printf)(" and get wasted by %s\n", fnname);
+          return thread_info_pop (info, fnname);
+        }
     }
-  // VG_ (printf)("\n");
+  VG_ (printf)("\n");
 
   target->end_time_ = GetTimesFromClock (CLOCK_MONOTONIC);
   return target;
@@ -295,7 +299,7 @@ get_thread_info (void)
   return ret;
 }
 
-static VG_REGPARM (1) void guest_call_entry (Addr64 addr)
+static VG_REGPARM (1) void guest_call_entry (HWord addr)
 {
   HChar buf[256];
   struct ThreadInfo *tinfo;
@@ -305,21 +309,21 @@ static VG_REGPARM (1) void guest_call_entry (Addr64 addr)
     {
       return;
     }
-  // VG_ (printf)("at function entry:%08llx:%s:%d\n", addr, buf, s_tid);
+  VG_ (printf)("at function entry:%08lx:%s:%d\n", addr, buf, s_tid);
   tinfo = get_thread_info ();
   if (!tinfo)
     return;
   thread_info_push (tinfo, buf);
 }
 
-static VG_REGPARM (1) void guest_ret_entry (Addr64 addr)
+static VG_REGPARM (1) void guest_ret_entry (HWord addr)
 {
   HChar buf[256];
   struct ThreadInfo *tinfo;
   struct CTraceStruct *c;
   Bool ret = VG_ (get_fnname)(addr, buf, 256);
 
-  // VG_ (printf)("at function return:%08llx:%s:%d\n", addr, buf, s_tid);
+  VG_ (printf)("at function return:%08lx:%s:%d\n", addr, buf, s_tid);
   if (ret != True)
     {
       return;
@@ -331,6 +335,41 @@ static VG_REGPARM (1) void guest_ret_entry (Addr64 addr)
   if (!c)
     return;
   ctrace_struct_submit (c, tinfo);
+}
+
+static VG_REGPARM (1) void guest_jump_indirect_entry (HWord addr)
+{
+  struct ThreadInfo *tinfo;
+  tinfo = get_thread_info ();
+  tinfo->pop_if_not_same_func_ = addr;
+}
+
+static VG_REGPARM (1) void guest_sb_entry (HWord addr)
+{
+  struct ThreadInfo *tinfo;
+  tinfo = get_thread_info ();
+  if (!tinfo)
+    return;
+  if (tinfo->pop_if_not_same_func_)
+    {
+      HChar buf1[256];
+      HChar buf2[256];
+      HWord addr1 = tinfo->pop_if_not_same_func_;
+      tinfo->pop_if_not_same_func_ = 0;
+
+      VG_ (get_fnname)(addr1, buf1, 256);
+      VG_ (get_fnname)(addr, buf2, 256);
+      if (VG_ (strcmp)(buf1, buf2))
+        {
+          struct CTraceStruct *c;
+          c = thread_info_pop (tinfo, NULL);
+          if (!c)
+            return;
+          ctrace_struct_submit (c, tinfo);
+          VG_ (printf)("at function pop jump:%08lx:%s:%d\n", addr1, buf1,
+                       VG_ (get_running_tid)());
+        }
+    }
 }
 
 static void
@@ -345,6 +384,20 @@ gt_post_clo_init (void)
   s_string_hash_table = VG_ (HT_construct)("fnname table");
 }
 
+static void
+add_host_function_helper (IRSB *sbOut, const char *str, void *func, HWord cia)
+{
+  IRExpr *addr;
+  IRDirty *di;
+  IRExpr **argv;
+
+  addr = mkIRExpr_HWord (cia);
+  argv = mkIRExprVec_1 (addr);
+
+  di = unsafeIRDirty_0_N (1, str, func, argv);
+  addStmtToIRSB (sbOut, IRStmt_Dirty (di));
+}
+
 static IRSB *
 gt_instrument (VgCallbackClosure *closure, IRSB *sbIn, VexGuestLayout *layout,
                VexGuestExtents *vge, VexArchInfo *archinfo_host,
@@ -352,8 +405,9 @@ gt_instrument (VgCallbackClosure *closure, IRSB *sbIn, VexGuestLayout *layout,
 {
   IRSB *sbOut;
   int i = 0;
-  Addr64 cia = 0;
+  HWord cia = 0;
   int last_imark = -1;
+  Bool has_added_sb_entry_helper = False;
   // Int isize;
   // ignore the ld.*so, libc.*so
   {
@@ -379,19 +433,28 @@ gt_instrument (VgCallbackClosure *closure, IRSB *sbIn, VexGuestLayout *layout,
   }
 
   sbOut = deepCopyIRSBExceptStmts (sbIn);
-  if (sbIn->jumpkind == Ijk_Ret)
+  if ((sbIn->jumpkind == Ijk_Ret || sbIn->jumpkind == Ijk_Boring))
     {
       int j;
-      for (j = sbIn->stmts_used - 1; j >= 0; j--)
+      do
         {
-          IRStmt *st;
-          st = sbIn->stmts[j];
-          if (st->tag == Ist_IMark)
+          if (sbIn->jumpkind == Ijk_Boring && sbIn->next->tag == Iex_Const)
             {
-              last_imark = j;
               break;
             }
+
+          for (j = sbIn->stmts_used - 1; j >= 0; j--)
+            {
+              IRStmt *st;
+              st = sbIn->stmts[j];
+              if (st->tag == Ist_IMark)
+                {
+                  last_imark = j;
+                  break;
+                }
+            }
         }
+      while (0);
     }
   for (/*use current i*/; i < sbIn->stmts_used; i++)
     {
@@ -408,33 +471,34 @@ gt_instrument (VgCallbackClosure *closure, IRSB *sbIn, VexGuestLayout *layout,
             cia = st->Ist.IMark.addr;
             // isize = st->Ist.IMark.len;
             // delta = st->Ist.IMark.delta;
+            if (!has_added_sb_entry_helper)
+              {
+                add_host_function_helper (
+                    sbOut, "guest_sb_entry",
+                    VG_ (fnptr_to_fnentry)(guest_sb_entry), cia);
+                has_added_sb_entry_helper = True;
+              }
             if (VG_ (get_fnname_if_entry)(cia, buf, 256))
               {
                 // VG_ (printf)("found fnname %s at %08x\n", buf, cia);
                 // handle code injection here
-                IRExpr *addr;
-                IRDirty *di;
-                IRExpr **argv;
-
-                addr = mkIRExpr_HWord (cia);
-                argv = mkIRExprVec_1 (addr);
-                di = unsafeIRDirty_0_N (
-                    1, "guest_call_entry",
-                    VG_ (fnptr_to_fnentry)(guest_call_entry), argv);
-                addStmtToIRSB (sbOut, IRStmt_Dirty (di));
+                add_host_function_helper (
+                    sbOut, "guest_call_entry",
+                    VG_ (fnptr_to_fnentry)(guest_call_entry), cia);
               }
             if (sbIn->jumpkind == Ijk_Ret && i == last_imark)
               {
-                IRExpr *addr;
-                IRDirty *di;
-                IRExpr **argv;
+                add_host_function_helper (
+                    sbOut, "guest_ret_entry",
+                    VG_ (fnptr_to_fnentry)(guest_ret_entry), cia);
+              }
 
-                addr = mkIRExpr_HWord (cia);
-                argv = mkIRExprVec_1 (addr);
-                di = unsafeIRDirty_0_N (
-                    1, "guest_ret_entry",
-                    VG_ (fnptr_to_fnentry)(guest_ret_entry), argv);
-                addStmtToIRSB (sbOut, IRStmt_Dirty (di));
+            if (sbIn->jumpkind == Ijk_Boring && sbIn->next->tag != Iex_Const
+                && i == last_imark)
+              {
+                add_host_function_helper (
+                    sbOut, "guest_jump_indirect_entry",
+                    VG_ (fnptr_to_fnentry)(guest_jump_indirect_entry), cia);
               }
           }
           break;
@@ -445,11 +509,11 @@ gt_instrument (VgCallbackClosure *closure, IRSB *sbIn, VexGuestLayout *layout,
         {
           HChar buf[256];
           VG_ (get_fnname)(cia, buf, 256);
-          if (VG_ (strcmp)(buf, "pthread_join") == 0)
+          if (VG_ (strstr)(buf, "memory_move_cost") == buf)
             {
               VG_ (printf)("   pass  %s  ", buf);
               ppIRStmt (st);
-              VG_ (printf)("\n");
+              VG_ (printf)(" sbIn->jumpkind = %x\n", sbIn->jumpkind);
             }
         }
       if (bNeedToAdd)
