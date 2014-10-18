@@ -163,9 +163,15 @@ thread_info_pop (struct ThreadInfo *info, const HChar *fnname)
     return NULL;
 
   target = &info->stack_[info->stack_end_];
+  // VG_ (printf)("thread_info_pop: pop out target->name_ = %s",
+  // target->name_);
   // work around c++ throw
   if (VG_ (strcmp)(target->name_, fnname))
-    return thread_info_pop (info, fnname);
+    {
+      // VG_ (printf)(" and watsted by %s\n", fnname);
+      return thread_info_pop (info, fnname);
+    }
+  // VG_ (printf)("\n");
 
   target->end_time_ = GetTimesFromClock (CLOCK_MONOTONIC);
   return target;
@@ -348,8 +354,8 @@ gt_instrument (VgCallbackClosure *closure, IRSB *sbIn, VexGuestLayout *layout,
   IRSB *sbOut;
   int i = 0;
   Addr64 cia = 0;
+  int last_imark = -1;
   // Int isize;
-  // VG_ (printf)("sb begins\n");
   // ignore the ld.*so, libc.*so
   {
     DebugInfo *info;
@@ -374,6 +380,20 @@ gt_instrument (VgCallbackClosure *closure, IRSB *sbIn, VexGuestLayout *layout,
   }
 
   sbOut = deepCopyIRSBExceptStmts (sbIn);
+  if (sbIn->jumpkind == Ijk_Ret)
+    {
+      int j;
+      for (j = sbIn->stmts_used - 1; j >= 0; j--)
+        {
+          IRStmt *st;
+          st = sbIn->stmts[j];
+          if (st->tag == Ist_IMark)
+            {
+              last_imark = j;
+              break;
+            }
+        }
+    }
   for (/*use current i*/; i < sbIn->stmts_used; i++)
     {
       IRStmt *st;
@@ -389,25 +409,12 @@ gt_instrument (VgCallbackClosure *closure, IRSB *sbIn, VexGuestLayout *layout,
             cia = st->Ist.IMark.addr;
             // isize = st->Ist.IMark.len;
             // delta = st->Ist.IMark.delta;
-            if (VG_ (get_fnname_if_entry)(cia, buf, 256))
-              {
-                // VG_ (printf)("found fnname %s at %08x\n", buf, cia);
-                // handle code injection here
-                IRExpr *addr;
-                IRDirty *di;
-                IRExpr **argv;
-
-                addr = mkIRExpr_HWord (cia);
-                argv = mkIRExprVec_1 (addr);
-                di = unsafeIRDirty_0_N (
-                    1, "guest_call_entry",
-                    VG_ (fnptr_to_fnentry)(guest_call_entry), argv);
-                addStmtToIRSB (sbOut, IRStmt_Dirty (di));
-              }
             if (!bIMarkMet)
               {
-                if (sbIn->jumpkind == Ijk_Ret)
+                if (VG_ (get_fnname_if_entry)(cia, buf, 256))
                   {
+                    // VG_ (printf)("found fnname %s at %08x\n", buf, cia);
+                    // handle code injection here
                     IRExpr *addr;
                     IRDirty *di;
                     IRExpr **argv;
@@ -415,11 +422,24 @@ gt_instrument (VgCallbackClosure *closure, IRSB *sbIn, VexGuestLayout *layout,
                     addr = mkIRExpr_HWord (cia);
                     argv = mkIRExprVec_1 (addr);
                     di = unsafeIRDirty_0_N (
-                        1, "guest_ret_entry",
-                        VG_ (fnptr_to_fnentry)(guest_ret_entry), argv);
+                        1, "guest_call_entry",
+                        VG_ (fnptr_to_fnentry)(guest_call_entry), argv);
                     addStmtToIRSB (sbOut, IRStmt_Dirty (di));
+                    bIMarkMet = True;
                   }
-                bIMarkMet = True;
+              }
+            if (sbIn->jumpkind == Ijk_Ret && i == last_imark)
+              {
+                IRExpr *addr;
+                IRDirty *di;
+                IRExpr **argv;
+
+                addr = mkIRExpr_HWord (cia);
+                argv = mkIRExprVec_1 (addr);
+                di = unsafeIRDirty_0_N (
+                    1, "guest_ret_entry",
+                    VG_ (fnptr_to_fnentry)(guest_ret_entry), argv);
+                addStmtToIRSB (sbOut, IRStmt_Dirty (di));
               }
           }
           break;
@@ -430,7 +450,7 @@ gt_instrument (VgCallbackClosure *closure, IRSB *sbIn, VexGuestLayout *layout,
         {
           HChar buf[256];
           VG_ (get_fnname)(cia, buf, 256);
-          if (VG_ (strcmp)(buf, "strcmp") == 0)
+          if (VG_ (strcmp)(buf, "pthread_join") == 0)
             {
               VG_ (printf)("   pass  %s  ", buf);
               ppIRStmt (st);
@@ -440,7 +460,6 @@ gt_instrument (VgCallbackClosure *closure, IRSB *sbIn, VexGuestLayout *layout,
       if (bNeedToAdd)
         addStmtToIRSB (sbOut, st);
     }
-  // VG_ (printf)("sb ends\n");
   return sbOut;
 }
 
