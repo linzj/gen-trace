@@ -269,7 +269,7 @@ static VG_REGPARM (1) void guest_call_entry (Addr64 addr)
     {
       return;
     }
-  VG_ (printf)("at function entry:%08llx:%s:%d\n", addr, buf, s_tid);
+  // VG_ (printf)("at function entry:%08llx:%s:%d\n", addr, buf, s_tid);
   tinfo = get_thread_info ();
   if (!tinfo)
     return;
@@ -283,7 +283,7 @@ static VG_REGPARM (1) void guest_ret_entry (Addr64 addr)
   struct CTraceStruct *c;
   Bool ret = VG_ (get_fnname)(addr, buf, 256);
 
-  VG_ (printf)("at function return:%08llx:%s:%d\n", addr, buf, s_tid);
+  // VG_ (printf)("at function return:%08llx:%s:%d\n", addr, buf, s_tid);
   if (ret != True)
     {
       return;
