@@ -54,12 +54,12 @@ gt_instrument (VgCallbackClosure *closure, IRSB *sbIn, VexGuestLayout *layout,
         {
         case Ist_IMark:
           {
-            Addr64 cia = st->Ist.IMark.addr + st->Ist.IMark.delta;
+            Addr64 cia = st->Ist.IMark.addr;
             Int isize = st->Ist.IMark.len;
             HChar buf[256];
             if (VG_ (get_fnname_if_entry)(cia, buf, 256))
               {
-                VG_ (printf)("found fnname %s\n", buf);
+                VG_ (printf)("found fnname %s at %08x\n", buf, cia);
               }
           }
         }
