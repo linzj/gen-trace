@@ -40,6 +40,7 @@
 #include "pub_tool_mallocfree.h"
 #include "pub_tool_libcproc.h"
 #include "pub_tool_libcfile.h"
+#include "pub_tool_xarray.h"
 
 #include <stdint.h>
 #include <inttypes.h>
@@ -141,7 +142,7 @@ struct CTraceStruct
   HChar *name_;
 };
 
-#define MAX_STACK (1000)
+#define MAX_STACK (100)
 struct ThreadInfo
 {
   int pid_;
@@ -181,6 +182,7 @@ thread_info_push (struct ThreadInfo *info, const HChar *fnname)
   index = info->stack_end_ - 1;
   target = &info->stack_[index];
   target->name_ = find_string (fnname);
+  tl_assert (target->name_ != NULL);
   target->start_time_ = GetTimesFromClock (CLOCK_MONOTONIC);
 }
 
@@ -199,31 +201,45 @@ static struct Record *s_head;
 static void
 DoWriteRecursive (int file_to_write, struct Record *current)
 {
-  char *buf;
-  int size;
-  if (current->next_)
-    DoWriteRecursive (file_to_write, current->next_);
+  char buf[256];
+  XArray *array;
+  const char comma[] = ", ";
+  int i;
+  Bool needComma = False;
 
-  static Bool needComma = False;
-  if (!needComma)
+  // init the array
+  array = VG_ (newXA)(VG_ (malloc), "gentrace.DoWriteRecursive.1", VG_ (free),
+                      sizeof (struct Record *));
+
+  while (current)
     {
-      needComma = True;
+      VG_ (addToXA)(array, &current);
+      current = current->next_;
     }
-  else
+  i = VG_ (sizeXA)(array) - 1;
+
+  for (; i >= 0; --i)
     {
-      const char comma[] = ", ";
-      VG_ (write)(file_to_write, comma, sizeof (comma) - 1);
+      if (!needComma)
+        {
+          needComma = True;
+        }
+      else
+        {
+          VG_ (write)(file_to_write, comma, sizeof (comma) - 1);
+        }
+      current = *(struct Record **)VG_ (indexXA)(array, i);
+      int size;
+      size = VG_ (snprintf)(
+          buf, 256,
+          "{\"cat\":\"%s\", \"pid\":%d, \"tid\":%d, \"ts\":%" PRId64 ", "
+          "\"ph\":\"X\", \"name\":\"%s\", \"dur\": %" PRId64 "}",
+          "profile", current->pid_, current->tid_, current->start_time_,
+          current->name_, current->dur_);
+      VG_ (write)(file_to_write, buf, size);
+      VG_ (free)(current);
     }
-  buf = alloca (256);
-
-  size = VG_ (snprintf)(
-      buf, 256, "{\"cat\":\"%s\", \"pid\":%d, \"tid\":%d, \"ts\":%" PRIu64 ", "
-                "\"ph\":\"X\", \"name\":\"%s\", \"dur\": %" PRIu64 "}",
-      "profile", current->pid_, current->tid_, current->start_time_,
-      current->name_, current->dur_);
-  VG_ (write)(file_to_write, buf, size);
-
-  VG_ (free)(current);
+  VG_ (deleteXA)(array);
 }
 
 static void
