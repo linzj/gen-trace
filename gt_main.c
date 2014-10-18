@@ -36,37 +36,266 @@
 #include "pub_tool_debuginfo.h"
 #include "pub_tool_machine.h"
 #include "pub_tool_libcbase.h"
+#include "pub_tool_hashtable.h"
+#include "pub_tool_mallocfree.h"
+#include "pub_tool_libcproc.h"
+#include "pub_tool_libcfile.h"
+
+#include <stdint.h>
+#include <inttypes.h>
+#include <time.h>
+#include <alloca.h>
+
+#include <sys/syscall.h>
 
 static ThreadId s_tid;
+#define HASH_CONSTANT 256
+
+struct MyNode
+{
+  VgHashNode super;
+  HChar str[1];
+};
+
+struct MyLookupNode
+{
+  VgHashNode super;
+  const HChar *str;
+};
+
+static UWord
+str_hash (const HChar *s)
+{
+  UWord hash_value = 0;
+  for (; *s; s++)
+    hash_value = (HASH_CONSTANT * hash_value + *s);
+  return hash_value;
+}
+
+static Word
+lookup_func (const void *node1, const void *node2)
+{
+  const struct MyLookupNode *lookup = node1;
+  const struct MyNode *node = node2;
+  return VG_ (strcmp)(lookup->str, (char *)node->str);
+}
+
+static VgHashTable s_string_hash_table;
+
+static HChar *
+new_string (const HChar *str, Word key)
+{
+  int len;
+  struct MyNode *new_node;
+
+  len = VG_ (strlen)(str);
+  new_node = VG_ (malloc)("gentrace.fnname", sizeof (struct MyNode) + len + 1);
+  new_node->super.key = key;
+  new_node->super.next = 0;
+  VG_ (strcpy)(new_node->str, str);
+  VG_ (HT_add_node)(s_string_hash_table, new_node);
+  return new_node->str;
+}
+
+static HChar *
+find_string (const HChar *str)
+{
+  struct MyLookupNode lookup_node;
+  struct MyNode *found;
+  lookup_node.super.key = str_hash (str);
+  lookup_node.str = str;
+
+  found = VG_ (HT_gen_lookup)(s_string_hash_table, &lookup_node, lookup_func);
+  if (found)
+    {
+      return found->str;
+    }
+  return new_string (str, lookup_node.super.key);
+}
+
+static int64_t
+GetTimesFromClock (int clockid)
+{
+  struct timespec ts_thread;
+  int64_t ret;
+  static const int64_t kMillisecondsPerSecond = 1000;
+  static const int64_t kMicrosecondsPerMillisecond = 1000;
+  static const int64_t kMicrosecondsPerSecond = kMicrosecondsPerMillisecond
+                                                * kMillisecondsPerSecond;
+  static const int64_t kNanosecondsPerMicrosecond = 1000;
+
+  extern SysRes VG_ (do_syscall)(UWord sysno, UWord, UWord, UWord, UWord,
+                                 UWord, UWord, UWord, UWord, UWord, UWord,
+                                 UWord, UWord);
+  VG_ (do_syscall)(__NR_clock_gettime, clockid, (UWord)&ts_thread, 0, 0, 0, 0,
+                   0, 0, 0, 0, 0, 0);
+  ret = ((int64_t)(ts_thread.tv_sec) * kMicrosecondsPerSecond)
+        + ((int64_t)(ts_thread.tv_nsec) / kNanosecondsPerMicrosecond);
+  return ret;
+}
+
+struct CTraceStruct
+{
+  int64_t start_time_;
+  int64_t end_time_;
+  HChar *name_;
+};
+
+#define MAX_STACK (1000)
+struct ThreadInfo
+{
+  int pid_;
+  int tid_;
+  struct CTraceStruct stack_[MAX_STACK];
+  int stack_end_;
+};
+
+#define MAX_THREAD_INFO (1000)
+struct ThreadInfo s_thread_info[MAX_THREAD_INFO];
+
+
+static struct CTraceStruct *
+thread_info_pop (struct ThreadInfo *info, const HChar *fnname)
+{
+  struct CTraceStruct *target;
+  if (info->stack_end_ == 0)
+    return NULL;
+  if (info->stack_end_-- > MAX_STACK)
+    return NULL;
+
+  target = &info->stack_[info->stack_end_];
+  // work around c++ throw
+  if (VG_ (strcmp)(target->name_, fnname))
+    return thread_info_pop (info, fnname);
+
+  target->end_time_ = GetTimesFromClock (CLOCK_MONOTONIC);
+  return target;
+}
+
+static void
+thread_info_push (struct ThreadInfo *info, const HChar *fnname)
+{
+  struct CTraceStruct *target;
+  int index;
+  if (info->stack_end_++ > MAX_STACK)
+    return;
+  index = info->stack_end_ - 1;
+  target = &info->stack_[index];
+  target->name_ = find_string (fnname);
+  target->start_time_ = GetTimesFromClock (CLOCK_MONOTONIC);
+}
+
+struct Record
+{
+  int pid_;
+  int tid_;
+  int64_t start_time_;
+  int64_t dur_;
+  const HChar *name_;
+  struct Record *next_;
+};
+
+static struct Record *s_head;
+
+static void
+DoWriteRecursive (int file_to_write, struct Record *current)
+{
+  char *buf;
+  int size;
+  if (current->next_)
+    DoWriteRecursive (file_to_write, current->next_);
+
+  static Bool needComma = False;
+  if (!needComma)
+    {
+      needComma = True;
+    }
+  else
+    {
+      const char comma[] = ", ";
+      VG_ (write)(file_to_write, comma, sizeof (comma));
+    }
+  buf = alloca (256);
+
+  size = VG_ (snprintf)(
+      buf, 256, "{\"cat\":\"%s\", \"pid\":%d, \"tid\":%d, \"ts\":%" PRIu64 ", "
+                "\"ph\":\"X\", \"name\":\"%s\", \"dur\": %" PRIu64 "}",
+      "profile", current->pid_, current->tid_, current->start_time_,
+      current->name_, current->dur_);
+  VG_ (write)(file_to_write, buf, size + 1);
+
+  VG_ (free)(current);
+}
+
+static void
+ctrace_struct_submit (struct CTraceStruct *c, struct ThreadInfo *tinfo)
+{
+  struct Record *r = VG_ (malloc)("gentrace.record", sizeof (struct Record));
+  r->pid_ = tinfo->pid_;
+  r->tid_ = tinfo->tid_;
+  r->start_time_ = c->start_time_;
+  r->name_ = c->name_;
+  if (c->end_time_ > c->start_time_)
+    r->dur_ = c->end_time_ - c->start_time_;
+  else
+    r->dur_ = 1;
+  r->next_ = s_head;
+  s_head = r;
+}
+
+static struct ThreadInfo *
+get_thread_info (void)
+{
+  int index;
+  struct ThreadInfo *ret;
+  if (s_tid > MAX_THREAD_INFO)
+    return NULL;
+  index = s_tid - 1;
+  ret = &s_thread_info[index];
+  if (ret->tid_ == 0)
+    {
+      ret->tid_ = s_tid;
+      ret->pid_ = VG_ (getpid)();
+    }
+  return ret;
+}
 
 static VG_REGPARM (1) void guest_call_entry (Addr64 addr)
 {
   HChar buf[256];
+  struct ThreadInfo *tinfo;
   Bool ret = VG_ (get_fnname_if_entry)(addr, buf, 256);
 
-  tl_assert (ret == True);
+  if (ret != True)
+    {
+      return;
+    }
   VG_ (printf)("at function entry:%08llx:%s:%d\n", addr, buf, s_tid);
+  tinfo = get_thread_info ();
+  if (!tinfo)
+    return;
+  thread_info_push (tinfo, buf);
 }
 
 static VG_REGPARM (1) void guest_ret_entry (Addr64 addr)
 {
-  HChar filebuf[256];
-  HChar dirbuf[256];
-  Bool dirAvailable;
-  Bool ret;
-  UInt linenum;
+  HChar buf[256];
+  struct ThreadInfo *tinfo;
+  struct CTraceStruct *c;
+  Bool ret = VG_ (get_fnname)(addr, buf, 256);
 
-  ret = VG_ (get_filename_linenum)(addr, filebuf, 256, dirbuf, 256,
-                                   &dirAvailable, &linenum);
-  if (!ret)
+  if (ret != True)
     {
-      VG_ (printf)("function return at :%08llx:%d\n", addr, s_tid);
       return;
     }
-  if (!dirAvailable)
-    dirbuf[0] = 0;
-  VG_ (printf)("function return at :%08llx:%s:%s:%u:%d\n", addr, dirbuf,
-               filebuf, linenum, s_tid);
+  VG_ (printf)("at function return:%08llx:%s:%d\n", addr, buf, s_tid);
+  tinfo = get_thread_info ();
+  if (!tinfo)
+    return;
+  c = thread_info_pop (tinfo, buf);
+  if (!c)
+    return;
+  ctrace_struct_submit (c, tinfo);
 }
 
 static void
@@ -78,6 +307,7 @@ gt_start_client_code_callback (ThreadId tid, ULong blocks_done)
 static void
 gt_post_clo_init (void)
 {
+  s_string_hash_table = VG_ (HT_construct)("fnname table");
 }
 
 static IRSB *
@@ -165,6 +395,24 @@ gt_instrument (VgCallbackClosure *closure, IRSB *sbIn, VexGuestLayout *layout,
 static void
 gt_fini (Int exitcode)
 {
+  SysRes res;
+  char buf[256];
+
+  VG_ (snprintf)(buf, 256, "trace_%d.json", VG_ (getpid)());
+  res = VG_ (open)(buf, VKI_O_WRONLY | VKI_O_TRUNC, 0);
+  if (sr_isError (res))
+    {
+      int output;
+      output = sr_Res (res);
+      const char start[] = "{\"traceEvents\": [";
+      const char end[] = "]}";
+      VG_ (printf)("writing trace file: %d", sizeof start);
+      VG_ (write)(output, start, sizeof (start));
+      DoWriteRecursive (output, s_head);
+      VG_ (write)(output, end, sizeof (end));
+      VG_ (close)(output);
+    }
+  VG_ (HT_destruct)(s_string_hash_table, VG_ (free));
 }
 
 static void
