@@ -235,6 +235,7 @@ DoWriteRecursive (int file_to_write, struct Record *current)
         {
           VG_ (memcpy)(name_buf, current->name_, 63);
           name_buf[63] = 0;
+          name = name_buf;
         }
       else
         {
