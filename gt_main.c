@@ -375,9 +375,9 @@ static VG_REGPARM (2) void guest_sb_entry (HWord addr, HWord jumpkind)
     return;
 
   tinfo->last_jumpkind_ = jumpkind;
-  // VG_ (printf)("guest_sb_entry: jumpkind = %lx,  addr "
-  //              "= %lx\n",
-  //              jumpkind, addr);
+  //  VG_ (printf)("guest_sb_entry: jumpkind = %lx,  addr "
+  //               "= %lx\n",
+  //               jumpkind, addr);
   switch (jumpkind)
     {
     case Ijk_Ret:
@@ -386,6 +386,7 @@ static VG_REGPARM (2) void guest_sb_entry (HWord addr, HWord jumpkind)
     case Ijk_Boring:
       break;
     case Ijk_Call:
+      tinfo->hit_abi_hint_ = True;
       break;
     default:
       tinfo->hit_abi_hint_ = False;
@@ -477,17 +478,6 @@ gt_instrument (VgCallbackClosure *closure, IRSB *sbIn, VexGuestLayout *layout,
             cia = st->Ist.IMark.addr;
             // isize = st->Ist.IMark.len;
             // delta = st->Ist.IMark.delta;
-            if (i == last_imark)
-              {
-                // VG_ (printf)("instrument: adding guest_sb_entry before instr
-                // "
-                //              "%lx, %0x\n",
-                //              cia, sbIn->jumpkind);
-                add_host_function_helper_2 (
-                    sbOut, "guest_sb_entry",
-                    VG_ (fnptr_to_fnentry)(guest_sb_entry), cia,
-                    sbIn->jumpkind);
-              }
             {
               HChar buf[1];
               Bool ret;
@@ -504,6 +494,17 @@ gt_instrument (VgCallbackClosure *closure, IRSB *sbIn, VexGuestLayout *layout,
                       VG_ (fnptr_to_fnentry)(guest_call_entry), cia);
                 }
             }
+            if (i == last_imark)
+              {
+                // VG_ (printf)("instrument: adding guest_sb_entry before instr
+                // "
+                //              "%lx, %0x\n",
+                //              cia, sbIn->jumpkind);
+                add_host_function_helper_2 (
+                    sbOut, "guest_sb_entry",
+                    VG_ (fnptr_to_fnentry)(guest_sb_entry), cia,
+                    sbIn->jumpkind);
+              }
           }
           break;
         case Ist_AbiHint:
