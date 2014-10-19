@@ -317,6 +317,19 @@ get_thread_info (void)
   return ret;
 }
 
+static Bool
+is_function_named (const HChar *name, HWord addr)
+{
+  HChar buf[256];
+  buf[0] = 0;
+  if (VG_ (get_fnname)(addr, buf, 256))
+    {
+      if (VG_ (strstr)(buf, name) == buf)
+        return True;
+    }
+  return False;
+}
+
 static VG_REGPARM (1) void guest_call_entry (HWord addr)
 {
   struct ThreadInfo *tinfo;
