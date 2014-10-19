@@ -150,6 +150,7 @@ struct ThreadInfo
   int stack_end_;
   Bool hit_abi_hint_;
   HWord last_jumpkind_;
+  HWord last_addr_;
 };
 
 #define MAX_THREAD_INFO (1000)
@@ -391,6 +392,7 @@ static VG_REGPARM (2) void guest_sb_entry (HWord addr, HWord jumpkind)
     return;
 
   tinfo->last_jumpkind_ = jumpkind;
+  tinfo->last_addr_ = addr;
   //  VG_ (printf)("guest_sb_entry: jumpkind = %lx,  addr "
   //               "= %lx\n",
   //               jumpkind, addr);
