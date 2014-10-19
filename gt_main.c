@@ -324,8 +324,9 @@ static VG_REGPARM (1) void guest_call_entry (HWord addr)
   tinfo = get_thread_info ();
   if (!tinfo)
     return;
-  VG_ (printf)("guest_call_entry: addr = %08lx, tinfo->hit_abi_hint_ = %d\n",
-               addr, tinfo->hit_abi_hint_);
+  // VG_ (printf)("guest_call_entry: addr = %08lx, tinfo->hit_abi_hint_ =
+  // %d\n",
+  //              addr, tinfo->hit_abi_hint_);
   if (tinfo->hit_abi_hint_)
     {
       thread_info_push (tinfo, addr);
