@@ -327,6 +327,9 @@ static VG_REGPARM (1) void guest_call_entry (HWord addr)
   // VG_ (printf)("guest_call_entry: addr = %08lx, tinfo->hit_abi_hint_ =
   // %d\n",
   //              addr, tinfo->hit_abi_hint_);
+
+  // this is talking about: Only the one with abi hint is a call.
+  // Or treat as a continuation as the last function.
   if (tinfo->hit_abi_hint_)
     {
       thread_info_push (tinfo, addr);
