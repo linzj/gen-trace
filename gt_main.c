@@ -52,6 +52,7 @@
 #include <sys/syscall.h>
 
 static ThreadId s_tid;
+static int s_max_stack = 15;
 #define HASH_CONSTANT 256
 
 struct MyNode
@@ -146,12 +147,11 @@ struct CTraceStruct
   HWord last_;
 };
 
-#define MAX_STACK (15)
 struct ThreadInfo
 {
   int pid_;
   int tid_;
-  struct CTraceStruct stack_[MAX_STACK];
+  struct CTraceStruct *stack_;
   int stack_end_;
   HWord last_jumpkind_;
   HWord last_addr_;
@@ -166,7 +166,7 @@ thread_info_pop (struct ThreadInfo *info)
   struct CTraceStruct *target;
   if (info->stack_end_ == 0)
     return NULL;
-  if (info->stack_end_-- > MAX_STACK)
+  if (info->stack_end_-- > s_max_stack)
     return NULL;
 
   target = &info->stack_[info->stack_end_];
@@ -181,7 +181,7 @@ thread_info_push (struct ThreadInfo *info, HWord addr)
 {
   struct CTraceStruct *target;
   int index;
-  if (++info->stack_end_ > MAX_STACK)
+  if (++info->stack_end_ > s_max_stack)
     return;
   index = info->stack_end_ - 1;
   target = &info->stack_[index];
@@ -265,28 +265,6 @@ ctrace_struct_submit (struct CTraceStruct *c, struct ThreadInfo *tinfo)
   struct Record *r;
   if (c->end_time_ - c->start_time_ <= 10)
     return;
-  // filter out the strcmp shit
-  // {
-  //   DebugInfo *info;
-  //   info = VG_ (find_DebugInfo)(c->last_);
-  //   if (info)
-  //     {
-  //       const HChar *so_name;
-  //       Bool should_return = False;
-  //       so_name = VG_ (DebugInfo_get_soname)(info);
-  //       if (VG_ (strstr)(so_name, ".so"))
-  //         {
-  //           if (VG_ (strstr)(so_name, "ld-linux") == so_name)
-  //             should_return = True;
-  //           else if (VG_ (strstr)(so_name, "libc") == so_name)
-  //             should_return = True;
-  //           else if (VG_ (strstr)(so_name, "libstdc++") == so_name)
-  //             should_return = True;
-  //         }
-  //       if (should_return)
-  //         return;
-  //     }
-  // }
 
   buf[0] = 0;
   VG_ (get_fnname)(c->last_, buf, 256);
@@ -314,9 +292,12 @@ get_thread_info (void)
   ret = &s_thread_info[index];
   if (ret->tid_ == 0)
     {
+      // initialize it if possible
       ret->tid_ = s_tid;
       ret->pid_ = VG_ (getpid)();
       ret->last_jumpkind_ = Ijk_INVALID;
+      ret->stack_ = VG_ (malloc)("gentrace.stack",
+                                 sizeof (struct CTraceStruct) * s_max_stack);
     }
   return ret;
 }
@@ -407,6 +388,7 @@ gt_post_clo_init (void)
                     "=> resetting it back to 0\n");
       VG_ (clo_vex_control).guest_chase_thresh = 0; // cannot be overriden.
     }
+  VG_ (message)(Vg_UserMsg, "max stack = %d\n", s_max_stack);
   s_string_hash_table = VG_ (HT_construct)("fnname table");
 }
 
@@ -500,8 +482,8 @@ flush_thread_info (void)
           int64_t end_time;
 
           end_time = GetTimesFromClock (CLOCK_MONOTONIC);
-          if (info->stack_end_ > MAX_STACK)
-            info->stack_end_ = MAX_STACK;
+          if (info->stack_end_ > s_max_stack)
+            info->stack_end_ = s_max_stack;
           while (info->stack_end_ > 0)
             {
               struct CTraceStruct *c = &info->stack_[--info->stack_end_];
@@ -537,6 +519,26 @@ gt_fini (Int exitcode)
   VG_ (HT_destruct)(s_string_hash_table, VG_ (free));
 }
 
+static Bool
+gt_process_cmd_line_option (const HChar *arg)
+{
+  if (VG_INT_CLO (arg, "--max-stack", s_max_stack))
+    {
+    }
+  return True;
+}
+
+static void
+gt_print_debug_usage (void)
+{
+}
+
+static void
+gt_print_usage (void)
+{
+  VG_ (printf)("\t--max-stack: Used to specify a max stack size. This option\n"
+               "\t             effects the size of trace output.\n");
+}
 static void
 gt_pre_clo_init (void)
 {
@@ -553,7 +555,8 @@ gt_pre_clo_init (void)
 
   VG_ (track_start_client_code)(&gt_start_client_code_callback);
 
-  /* No needs, no core events to track */
+  VG_ (needs_command_line_options)(gt_process_cmd_line_option, gt_print_usage,
+                                   gt_print_debug_usage);
 }
 
 VG_DETERMINE_INTERFACE_VERSION (gt_pre_clo_init)

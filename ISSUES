@@ -1,3 +1,2 @@
-1. The depth of the stack is not able to tune from options.
-2. The unknown stack frame should be marked as (module:address) semantics.
+1. The unknown stack frame should be marked as (module:address) semantics.
 
