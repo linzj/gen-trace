@@ -134,8 +134,8 @@ GetTimesFromClock (int clockid)
   VG_ (do_syscall)(__NR_clock_gettime, clockid, (UWord)&ts_thread, 0, 0, 0, 0);
   ret = ((int64_t)(ts_thread.tv_sec) * kMicrosecondsPerSecond)
         + ((int64_t)(ts_thread.tv_nsec) / kNanosecondsPerMicrosecond);
-  if (last_time == ret)
-    return last_time + 1;
+  if (last_time >= ret)
+    return (last_time += 1);
   last_time = ret;
   return ret;
 }
@@ -259,6 +259,20 @@ DoWriteRecursive (int file_to_write, struct Record *current)
 }
 
 static void
+overwrite_empty_fnname (HChar buf[256], HWord addr)
+{
+  DebugInfo *debug_info;
+  debug_info = VG_ (find_DebugInfo)(addr);
+  if (!debug_info)
+    {
+      VG_ (snprintf)(buf, 256, "Unknown function: %lx", addr);
+      return;
+    }
+  VG_ (snprintf)(buf, 256, "%s: %08lx", VG_ (DebugInfo_get_filename)(debug_info),
+                 addr - VG_ (DebugInfo_get_text_avma)(debug_info));
+}
+
+static void
 ctrace_struct_submit (struct CTraceStruct *c, struct ThreadInfo *tinfo)
 {
   HChar buf[256];
@@ -268,6 +282,8 @@ ctrace_struct_submit (struct CTraceStruct *c, struct ThreadInfo *tinfo)
 
   buf[0] = 0;
   VG_ (get_fnname)(c->last_, buf, 256);
+  if (buf[0] == 0)
+    overwrite_empty_fnname (buf, c->last_);
   r = VG_ (malloc)("gentrace.record", sizeof (struct Record));
   r->pid_ = tinfo->pid_;
   r->tid_ = tinfo->tid_;
