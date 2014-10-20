@@ -42,6 +42,7 @@
 #include "pub_tool_libcfile.h"
 #include "pub_tool_xarray.h"
 #include "pub_tool_threadstate.h"
+#include "pub_tool_options.h"
 
 #include <stdint.h>
 #include <inttypes.h>
@@ -126,11 +127,15 @@ GetTimesFromClock (int clockid)
                                                 * kMillisecondsPerSecond;
   static const int64_t kNanosecondsPerMicrosecond = 1000;
 
+  static int64_t last_time;
   extern SysRes VG_ (do_syscall)(UWord sysno, UWord, UWord, UWord, UWord,
                                  UWord, UWord);
   VG_ (do_syscall)(__NR_clock_gettime, clockid, (UWord)&ts_thread, 0, 0, 0, 0);
   ret = ((int64_t)(ts_thread.tv_sec) * kMicrosecondsPerSecond)
         + ((int64_t)(ts_thread.tv_nsec) / kNanosecondsPerMicrosecond);
+  if (last_time == ret)
+    return last_time + 1;
+  last_time = ret;
   return ret;
 }
 
@@ -141,14 +146,13 @@ struct CTraceStruct
   HWord last_;
 };
 
-#define MAX_STACK (1000)
+#define MAX_STACK (15)
 struct ThreadInfo
 {
   int pid_;
   int tid_;
   struct CTraceStruct stack_[MAX_STACK];
   int stack_end_;
-  Bool hit_abi_hint_;
   HWord last_jumpkind_;
   HWord last_addr_;
 };
@@ -177,7 +181,7 @@ thread_info_push (struct ThreadInfo *info, HWord addr)
 {
   struct CTraceStruct *target;
   int index;
-  if (info->stack_end_++ > MAX_STACK)
+  if (++info->stack_end_ > MAX_STACK)
     return;
   index = info->stack_end_ - 1;
   target = &info->stack_[index];
@@ -312,7 +316,6 @@ get_thread_info (void)
     {
       ret->tid_ = s_tid;
       ret->pid_ = VG_ (getpid)();
-      ret->hit_abi_hint_ = False;
       ret->last_jumpkind_ = Ijk_INVALID;
     }
   return ret;
@@ -331,42 +334,16 @@ is_function_named (const HChar *name, HWord addr)
   return False;
 }
 
-static VG_REGPARM (1) void guest_call_entry (HWord addr)
+static void
+handle_call_entry (HWord addr)
 {
   struct ThreadInfo *tinfo;
-
   tinfo = get_thread_info ();
   if (!tinfo)
     return;
-  // VG_ (printf)("guest_call_entry: addr = %08lx, tinfo->hit_abi_hint_ =
-  // %d\n",
-  //              addr, tinfo->hit_abi_hint_);
+  // VG_ (printf)("handle_call_entry : addr = %lx\n", addr);
 
-  // this is talking about: Only the one with abi hint is a call.
-  // Or treat as a continuation as the last function.
-  if (tinfo->hit_abi_hint_)
-    {
-      thread_info_push (tinfo, addr);
-      tinfo->hit_abi_hint_ = False;
-      return;
-    }
-  if (tinfo->last_jumpkind_ == Ijk_Boring)
-    {
-      // replace the top
-      tinfo->stack_[tinfo->stack_end_ - 1].last_ = addr;
-      // VG_ (printf)("guest_call_entry: replace the top to %lx\n", addr);
-    }
-}
-
-static VG_REGPARM (1) void guest_abi_hint_entry (HWord addr)
-{
-  struct ThreadInfo *tinfo;
-
-  tinfo = get_thread_info ();
-  if (!tinfo)
-    return;
-  tinfo->hit_abi_hint_ = True;
-  // VG_ (printf)("guest_abi_hint_entry: hit at %lx\n", addr);
+  thread_info_push (tinfo, addr);
 }
 
 static void
@@ -390,24 +367,19 @@ static VG_REGPARM (2) void guest_sb_entry (HWord addr, HWord jumpkind)
   tinfo = get_thread_info ();
   if (!tinfo)
     return;
-
+  HWord last_jumpkind = tinfo->last_jumpkind_;
   tinfo->last_jumpkind_ = jumpkind;
   tinfo->last_addr_ = addr;
-  //  VG_ (printf)("guest_sb_entry: jumpkind = %lx,  addr "
-  //               "= %lx\n",
-  //               jumpkind, addr);
-  switch (jumpkind)
+
+  switch (last_jumpkind)
     {
     case Ijk_Ret:
       handle_ret_entry (addr);
       return;
-    case Ijk_Boring:
-      break;
     case Ijk_Call:
-      tinfo->hit_abi_hint_ = True;
+      handle_call_entry (addr);
       break;
     default:
-      tinfo->hit_abi_hint_ = False;
       break;
     }
 }
@@ -421,6 +393,20 @@ gt_start_client_code_callback (ThreadId tid, ULong blocks_done)
 static void
 gt_post_clo_init (void)
 {
+  if (VG_ (clo_vex_control).iropt_unroll_thresh != 0)
+    {
+      VG_ (message)(Vg_UserMsg,
+                    "gentrace only works with --vex-iropt-unroll-thresh=0\n"
+                    "=> resetting it back to 0\n");
+      VG_ (clo_vex_control).iropt_unroll_thresh = 0; // cannot be overriden.
+    }
+  if (VG_ (clo_vex_control).guest_chase_thresh != 0)
+    {
+      VG_ (message)(Vg_UserMsg,
+                    "gentrace only works with --vex-guest-chase-thresh=0\n"
+                    "=> resetting it back to 0\n");
+      VG_ (clo_vex_control).guest_chase_thresh = 0; // cannot be overriden.
+    }
   s_string_hash_table = VG_ (HT_construct)("fnname table");
 }
 
@@ -441,21 +427,6 @@ add_host_function_helper_2 (IRSB *sbOut, const char *str, void *func,
   addStmtToIRSB (sbOut, IRStmt_Dirty (di));
 }
 
-static void
-add_host_function_helper_1 (IRSB *sbOut, const char *str, void *func,
-                            HWord cia)
-{
-  IRExpr *addr;
-  IRDirty *di;
-  IRExpr **argv;
-
-  addr = mkIRExpr_HWord (cia);
-  argv = mkIRExprVec_1 (addr);
-
-  di = unsafeIRDirty_0_N (1, str, func, argv);
-  addStmtToIRSB (sbOut, IRStmt_Dirty (di));
-}
-
 static IRSB *
 gt_instrument (VgCallbackClosure *closure, IRSB *sbIn, VexGuestLayout *layout,
                VexGuestExtents *vge, VexArchInfo *archinfo_host,
@@ -463,26 +434,12 @@ gt_instrument (VgCallbackClosure *closure, IRSB *sbIn, VexGuestLayout *layout,
 {
   IRSB *sbOut;
   int i = 0;
-  int last_imark = -1;
+  Bool has_inject_sb_entry = False;
   HWord cia = 0;
   // Int isize;
   // filter out the strcmp shit
 
   sbOut = deepCopyIRSBExceptStmts (sbIn);
-  {
-    int j;
-
-    for (j = sbIn->stmts_used - 1; j >= 0; j--)
-      {
-        IRStmt *st;
-        st = sbIn->stmts[j];
-        if (st->tag == Ist_IMark)
-          {
-            last_imark = j;
-            break;
-          }
-      }
-  }
   for (/*use current i*/; i < sbIn->stmts_used; i++)
     {
       IRStmt *st;
@@ -494,25 +451,7 @@ gt_instrument (VgCallbackClosure *closure, IRSB *sbIn, VexGuestLayout *layout,
         case Ist_IMark:
           {
             cia = st->Ist.IMark.addr;
-            // isize = st->Ist.IMark.len;
-            // delta = st->Ist.IMark.delta;
-            {
-              HChar buf[1];
-              Bool ret;
-
-              ret = VG_ (get_fnname_if_entry)(cia, buf, 1);
-              if (ret)
-                {
-                  // VG_ (printf)(
-                  //     "instrument: adding guest_call_entry before instr "
-                  //     "%lx, %0x\n",
-                  //     cia, sbIn->jumpkind);
-                  add_host_function_helper_1 (
-                      sbOut, "guest_call_entry",
-                      VG_ (fnptr_to_fnentry)(guest_call_entry), cia);
-                }
-            }
-            if (i == last_imark)
+            if (!has_inject_sb_entry)
               {
                 // VG_ (printf)("instrument: adding guest_sb_entry before instr
                 // "
@@ -522,18 +461,10 @@ gt_instrument (VgCallbackClosure *closure, IRSB *sbIn, VexGuestLayout *layout,
                     sbOut, "guest_sb_entry",
                     VG_ (fnptr_to_fnentry)(guest_sb_entry), cia,
                     sbIn->jumpkind);
+                has_inject_sb_entry = True;
               }
           }
           break;
-        case Ist_AbiHint:
-          {
-            // don't add hint to below the ret instr.
-            if (sbIn->jumpkind == Ijk_Ret && i > last_imark)
-              break;
-            add_host_function_helper_1 (
-                sbOut, "guest_abi_hint_entry",
-                VG_ (fnptr_to_fnentry)(guest_abi_hint_entry), cia);
-          }
         default:
           break;
         }
@@ -545,7 +476,7 @@ gt_instrument (VgCallbackClosure *closure, IRSB *sbIn, VexGuestLayout *layout,
           {
             VG_ (printf)("   pass  %s ", buf);
             ppIRStmt (st);
-            VG_ (printf)(" sbIn->jumpkind = %x\n", sbIn->jumpkind);
+            VG_ (printf)(" sbIn->jumpkind = %x, %p\n", sbIn->jumpkind, sbIn);
           }
         }
       if (bNeedToAdd)
