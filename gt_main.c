@@ -43,6 +43,7 @@
 #include "pub_tool_xarray.h"
 #include "pub_tool_threadstate.h"
 #include "pub_tool_options.h"
+#include "pub_tool_aspacemgr.h"
 
 #include <stdint.h>
 #include <inttypes.h>
@@ -261,15 +262,15 @@ DoWriteRecursive (int file_to_write, struct Record *current)
 static void
 overwrite_empty_fnname (HChar buf[256], HWord addr)
 {
-  DebugInfo *debug_info;
-  debug_info = VG_ (find_DebugInfo)(addr);
-  if (!debug_info)
+  const NSegment *segment;
+  segment = VG_ (am_find_nsegment)(addr);
+  if (!segment)
     {
-      VG_ (snprintf)(buf, 256, "Unknown function: %lx", addr);
+      VG_ (snprintf)(buf, 256, "Unknown: %08lx", addr);
       return;
     }
-  VG_ (snprintf)(buf, 256, "%s: %08lx", VG_ (DebugInfo_get_filename)(debug_info),
-                 addr - VG_ (DebugInfo_get_text_avma)(debug_info));
+  VG_ (snprintf)(buf, 256, "%s: %08lx", VG_ (am_get_filename)(segment),
+                 addr - segment->start);
 }
 
 static void
