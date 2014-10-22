@@ -161,8 +161,10 @@ struct ThreadInfo
 #define MAX_THREAD_INFO (1000)
 struct ThreadInfo s_thread_info[MAX_THREAD_INFO];
 
+static void overwrite_empty_fnname (HChar buf[256], HWord addr);
+
 static struct CTraceStruct *
-thread_info_pop (struct ThreadInfo *info)
+thread_info_pop (struct ThreadInfo *info, HWord last_addr)
 {
   struct CTraceStruct *target;
   if (info->stack_end_ == 0)
@@ -173,7 +175,20 @@ thread_info_pop (struct ThreadInfo *info)
   target = &info->stack_[info->stack_end_];
 
   target->end_time_ = GetTimesFromClock (CLOCK_MONOTONIC);
-  // VG_ (printf)("thread_info_pop: pop addr %lx\n", target->last_);
+  // {
+  //   HWord addr = target->last_;
+  //   HChar buf1[256], buf2[256];
+  //   buf1[0] = 0;
+  //   buf2[0] = 0;
+  //   VG_ (get_fnname)(addr, buf1, 256);
+  //   if (buf1[0] == 0)
+  //     overwrite_empty_fnname (buf1, addr);
+  //   VG_ (get_fnname)(info->last_addr_, buf2, 256);
+  //   if (buf2[0] == 0)
+  //     overwrite_empty_fnname (buf1, last_addr);
+  //   VG_ (printf)("thread_info_pop: pop addr %lx, %s, %d, %lx, %s\n",
+  //   target->last_, buf1, info->stack_end_, last_addr, buf2);
+  // }
   return target;
 }
 
@@ -188,7 +203,16 @@ thread_info_push (struct ThreadInfo *info, HWord addr)
   target = &info->stack_[index];
   target->last_ = addr;
   target->start_time_ = GetTimesFromClock (CLOCK_MONOTONIC);
-  // VG_ (printf)("thread_info_push: push addr %lx\n", addr);
+
+  // {
+  //   HChar buf[256];
+  //   buf[0] = 0;
+  //   VG_ (get_fnname)(addr, buf, 256);
+  //   if (buf[0] == 0)
+  //     overwrite_empty_fnname (buf, addr);
+  //   VG_ (printf)("thread_info_push: push addr %lx, %s, %d\n", addr, buf,
+  //   info->stack_end_);
+  // }
 }
 
 struct Record
@@ -353,7 +377,7 @@ handle_ret_entry (HWord addr)
   if (!tinfo)
     return;
   // VG_ (printf)("handle_ret_entry : addr = %lx\n", addr);
-  c = thread_info_pop (tinfo);
+  c = thread_info_pop (tinfo, addr);
   if (!c)
     return;
   ctrace_struct_submit (c, tinfo);
@@ -366,13 +390,14 @@ static VG_REGPARM (2) void guest_sb_entry (HWord addr, HWord jumpkind)
   if (!tinfo)
     return;
   HWord last_jumpkind = tinfo->last_jumpkind_;
+  HWord last_addr = tinfo->last_addr_;
   tinfo->last_jumpkind_ = jumpkind;
   tinfo->last_addr_ = addr;
 
   switch (last_jumpkind)
     {
     case Ijk_Ret:
-      handle_ret_entry (addr);
+      handle_ret_entry (last_addr);
       return;
     case Ijk_Call:
       handle_call_entry (addr);
@@ -470,7 +495,10 @@ gt_instrument (VgCallbackClosure *closure, IRSB *sbIn, VexGuestLayout *layout,
       if (False)
         {
           HChar buf[256];
+          buf[0] = 0;
           VG_ (get_fnname)(cia, buf, 256);
+          if (buf[0] == 0)
+            overwrite_empty_fnname (buf, cia);
           // if (VG_ (strstr)(buf, "memory_move_cost") == buf)
           {
             VG_ (printf)("   pass  %s ", buf);
