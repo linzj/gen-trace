@@ -169,7 +169,7 @@ thread_info_pop (struct ThreadInfo *info, HWord last_addr)
   struct CTraceStruct *target;
   if (info->stack_end_ == 0)
     return NULL;
-  if (info->stack_end_-- > s_max_stack)
+  if (info->stack_end_-- >= s_max_stack)
     return NULL;
 
   target = &info->stack_[info->stack_end_];
