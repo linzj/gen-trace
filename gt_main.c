@@ -1,6 +1,6 @@
 
 /*--------------------------------------------------------------------*/
-/*--- Nulgrind: The minimal Valgrind tool.               nl_main.c ---*/
+/*--- gentrace: The trace file generator                gt_main.c ---*/
 /*--------------------------------------------------------------------*/
 
 /*
@@ -156,7 +156,7 @@ struct ThreadInfo
   int stack_end_;
   HWord last_jumpkind_;
   HWord last_addr_;
-  Bool bc_taken_;
+  Word bc_jumpkind_;
 };
 
 #define MAX_THREAD_INFO (1000)
@@ -340,7 +340,7 @@ get_thread_info (void)
       ret->last_jumpkind_ = Ijk_INVALID;
       ret->stack_ = VG_ (malloc)("gentrace.stack",
                                  sizeof (struct CTraceStruct) * s_max_stack);
-      ret->bc_taken_ = False;
+      ret->bc_jumpkind_ = Ijk_INVALID;
     }
   return ret;
 }
@@ -393,13 +393,16 @@ static VG_REGPARM (2) void guest_sb_entry (HWord addr, HWord jumpkind)
     return;
   HWord last_jumpkind = tinfo->last_jumpkind_;
   HWord last_addr = tinfo->last_addr_;
-  Bool bc_taken = tinfo->bc_taken_;
+  Word bc_jumpkind = tinfo->bc_jumpkind_;
   tinfo->last_jumpkind_ = jumpkind;
   tinfo->last_addr_ = addr;
 
-  tinfo->bc_taken_ = False;
-  if (bc_taken)
-    return;
+  if (bc_jumpkind != Ijk_INVALID)
+    {
+      last_jumpkind = bc_jumpkind;
+
+      tinfo->bc_jumpkind_ = Ijk_INVALID;
+    }
 
   switch (last_jumpkind)
     {
@@ -414,7 +417,7 @@ static VG_REGPARM (2) void guest_sb_entry (HWord addr, HWord jumpkind)
     }
 }
 
-static VG_REGPARM (1) void guest_bc_entry (Word taken)
+static VG_REGPARM (2) void guest_bc_entry (Word taken, Word jumpkind)
 {
   if (taken == 0)
     return;
@@ -423,7 +426,7 @@ static VG_REGPARM (1) void guest_bc_entry (Word taken)
   tinfo = get_thread_info ();
   if (!tinfo)
     return;
-  tinfo->bc_taken_ = True;
+  tinfo->bc_jumpkind_ = jumpkind;
 }
 
 static void
@@ -454,30 +457,13 @@ gt_post_clo_init (void)
 }
 
 static void
-add_host_function_helper_from_atom (IRSB *sbOut, const char *str, void *func,
-                                    IRExpr *atom)
-{
-  IRDirty *di;
-  IRExpr **argv;
-
-  argv = mkIRExprVec_1 (atom);
-
-  di = unsafeIRDirty_0_N (1, str, func, argv);
-  addStmtToIRSB (sbOut, IRStmt_Dirty (di));
-}
-
-static void
 add_host_function_helper_2 (IRSB *sbOut, const char *str, void *func,
-                            HWord cia, HWord jumpkind)
+                            IRExpr *r1, IRExpr *r2)
 {
-  IRExpr *addr;
-  IRExpr *jumpkind_expr;
   IRDirty *di;
   IRExpr **argv;
 
-  addr = mkIRExpr_HWord (cia);
-  jumpkind_expr = mkIRExpr_HWord (jumpkind);
-  argv = mkIRExprVec_2 (addr, jumpkind_expr);
+  argv = mkIRExprVec_2 (r1, r2);
 
   di = unsafeIRDirty_0_N (2, str, func, argv);
   addStmtToIRSB (sbOut, IRStmt_Dirty (di));
@@ -515,8 +501,8 @@ gt_instrument (VgCallbackClosure *closure, IRSB *sbIn, VexGuestLayout *layout,
                 //              cia, sbIn->jumpkind);
                 add_host_function_helper_2 (
                     sbOut, "guest_sb_entry",
-                    VG_ (fnptr_to_fnentry)(guest_sb_entry), cia,
-                    sbIn->jumpkind);
+                    VG_ (fnptr_to_fnentry)(guest_sb_entry),
+                    mkIRExpr_HWord (cia), mkIRExpr_HWord (sbIn->jumpkind));
                 has_inject_sb_entry = True;
               }
           }
@@ -531,12 +517,9 @@ gt_instrument (VgCallbackClosure *closure, IRSB *sbIn, VexGuestLayout *layout,
               break;
             IRType tyW = hWordTy;
             IROp widen = tyW == Ity_I32 ? Iop_1Uto32 : Iop_1Uto64;
-            IROp opXOR = tyW == Ity_I32 ? Iop_Xor32 : Iop_Xor64;
             IRTemp guard1 = newIRTemp (sbOut->tyenv, Ity_I1);
             IRTemp guardW = newIRTemp (sbOut->tyenv, tyW);
             IRTemp guard = newIRTemp (sbOut->tyenv, tyW);
-            IRExpr *one = tyW == Ity_I32 ? IRExpr_Const (IRConst_U32 (1))
-                                         : IRExpr_Const (IRConst_U64 (1));
 
             /* Widen the guard expression. */
             addStmtToIRSB (sbOut, IRStmt_WrTmp (guard1, st->Ist.Exit.guard));
@@ -546,9 +529,10 @@ gt_instrument (VgCallbackClosure *closure, IRSB *sbIn, VexGuestLayout *layout,
                               IRExpr_Unop (widen, IRExpr_RdTmp (guard1))));
             /* If the exit is inverted, invert the sense of the guard. */
             addStmtToIRSB (sbOut, IRStmt_WrTmp (guard, IRExpr_RdTmp (guardW)));
-            add_host_function_helper_from_atom (
-                sbOut, "guest_bc_entry",
-                VG_ (fnptr_to_fnentry)(guest_bc_entry), IRExpr_RdTmp (guard));
+            add_host_function_helper_2 (sbOut, "guest_bc_entry",
+                                        VG_ (fnptr_to_fnentry)(guest_bc_entry),
+                                        IRExpr_RdTmp (guard),
+                                        mkIRExpr_HWord (st->Ist.Exit.jk));
           }
         default:
           break;
