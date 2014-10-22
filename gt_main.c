@@ -156,6 +156,7 @@ struct ThreadInfo
   int stack_end_;
   HWord last_jumpkind_;
   HWord last_addr_;
+  Bool bc_taken_;
 };
 
 #define MAX_THREAD_INFO (1000)
@@ -339,6 +340,7 @@ get_thread_info (void)
       ret->last_jumpkind_ = Ijk_INVALID;
       ret->stack_ = VG_ (malloc)("gentrace.stack",
                                  sizeof (struct CTraceStruct) * s_max_stack);
+      ret->bc_taken_ = False;
     }
   return ret;
 }
@@ -391,8 +393,13 @@ static VG_REGPARM (2) void guest_sb_entry (HWord addr, HWord jumpkind)
     return;
   HWord last_jumpkind = tinfo->last_jumpkind_;
   HWord last_addr = tinfo->last_addr_;
+  Bool bc_taken = tinfo->bc_taken_;
   tinfo->last_jumpkind_ = jumpkind;
   tinfo->last_addr_ = addr;
+
+  tinfo->bc_taken_ = False;
+  if (bc_taken)
+    return;
 
   switch (last_jumpkind)
     {
@@ -405,6 +412,18 @@ static VG_REGPARM (2) void guest_sb_entry (HWord addr, HWord jumpkind)
     default:
       break;
     }
+}
+
+static VG_REGPARM (1) void guest_bc_entry (Word taken)
+{
+  if (taken == 0)
+    return;
+
+  struct ThreadInfo *tinfo;
+  tinfo = get_thread_info ();
+  if (!tinfo)
+    return;
+  tinfo->bc_taken_ = True;
 }
 
 static void
@@ -432,6 +451,19 @@ gt_post_clo_init (void)
     }
   VG_ (message)(Vg_UserMsg, "max stack = %d\n", s_max_stack);
   s_string_hash_table = VG_ (HT_construct)("fnname table");
+}
+
+static void
+add_host_function_helper_from_atom (IRSB *sbOut, const char *str, void *func,
+                                    IRExpr *atom)
+{
+  IRDirty *di;
+  IRExpr **argv;
+
+  argv = mkIRExprVec_1 (atom);
+
+  di = unsafeIRDirty_0_N (1, str, func, argv);
+  addStmtToIRSB (sbOut, IRStmt_Dirty (di));
 }
 
 static void
@@ -489,6 +521,35 @@ gt_instrument (VgCallbackClosure *closure, IRSB *sbIn, VexGuestLayout *layout,
               }
           }
           break;
+        case Ist_Exit:
+          {
+            Bool guest_exit;
+            guest_exit = (st->Ist.Exit.jk == Ijk_Boring)
+                         || (st->Ist.Exit.jk == Ijk_Call)
+                         || (st->Ist.Exit.jk == Ijk_Ret);
+            if (!guest_exit)
+              break;
+            IRType tyW = hWordTy;
+            IROp widen = tyW == Ity_I32 ? Iop_1Uto32 : Iop_1Uto64;
+            IROp opXOR = tyW == Ity_I32 ? Iop_Xor32 : Iop_Xor64;
+            IRTemp guard1 = newIRTemp (sbOut->tyenv, Ity_I1);
+            IRTemp guardW = newIRTemp (sbOut->tyenv, tyW);
+            IRTemp guard = newIRTemp (sbOut->tyenv, tyW);
+            IRExpr *one = tyW == Ity_I32 ? IRExpr_Const (IRConst_U32 (1))
+                                         : IRExpr_Const (IRConst_U64 (1));
+
+            /* Widen the guard expression. */
+            addStmtToIRSB (sbOut, IRStmt_WrTmp (guard1, st->Ist.Exit.guard));
+            addStmtToIRSB (
+                sbOut,
+                IRStmt_WrTmp (guardW,
+                              IRExpr_Unop (widen, IRExpr_RdTmp (guard1))));
+            /* If the exit is inverted, invert the sense of the guard. */
+            addStmtToIRSB (sbOut, IRStmt_WrTmp (guard, IRExpr_RdTmp (guardW)));
+            add_host_function_helper_from_atom (
+                sbOut, "guest_bc_entry",
+                VG_ (fnptr_to_fnentry)(guest_bc_entry), IRExpr_RdTmp (guard));
+          }
         default:
           break;
         }
