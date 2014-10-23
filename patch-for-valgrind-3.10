@@ -1,0 +1,24 @@
+--- a/Makefile.am	2014-09-08 20:27:54.000000000 +0800
++++ b/Makefile.am	2014-10-20 13:52:03.753880077 +0800
+@@ -10,7 +10,8 @@
+ 		lackey \
+ 		none \
+ 		helgrind \
+-		drd
++		drd \
++		gen-trace
+ 
+ EXP_TOOLS = 	exp-sgcheck \
+ 		exp-bbv \
+--- a/configure.ac	2014-09-11 17:12:44.000000000 +0800
++++ b/configure.ac	2014-10-20 13:52:16.337879739 +0800
+@@ -3035,6 +3035,8 @@
+    exp-dhat/Makefile
+    exp-dhat/tests/Makefile
+    shared/Makefile
++   gen-trace/Makefile
++   gen-trace/tests/Makefile
+ ])
+ AC_CONFIG_FILES([coregrind/link_tool_exe_linux],
+                 [chmod +x coregrind/link_tool_exe_linux])
+
