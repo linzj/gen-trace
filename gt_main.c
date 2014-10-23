@@ -502,7 +502,8 @@ gt_instrument (VgCallbackClosure *closure, IRSB *sbIn, VexGuestLayout *layout,
                 add_host_function_helper_2 (
                     sbOut, "guest_sb_entry",
                     VG_ (fnptr_to_fnentry)(guest_sb_entry),
-                    mkIRExpr_HWord (cia), mkIRExpr_HWord (sbIn->jumpkind));
+                    mkIRExpr_HWord (cia + st->Ist.IMark.delta),
+                    mkIRExpr_HWord (sbIn->jumpkind));
                 has_inject_sb_entry = True;
               }
           }
