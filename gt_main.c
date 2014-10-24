@@ -417,11 +417,8 @@ static VG_REGPARM (2) void guest_sb_entry (HWord addr, HWord jumpkind)
     }
 }
 
-static VG_REGPARM (2) void guest_bc_entry (Word taken, Word jumpkind)
+static VG_REGPARM (1) void guest_bc_entry (HWord jumpkind)
 {
-  if (taken == 0)
-    return;
-
   struct ThreadInfo *tinfo;
   tinfo = get_thread_info ();
   if (!tinfo)
@@ -511,29 +508,22 @@ gt_instrument (VgCallbackClosure *closure, IRSB *sbIn, VexGuestLayout *layout,
         case Ist_Exit:
           {
             Bool guest_exit;
+            IRDirty *di;
+            IRExpr **args;
             guest_exit = (st->Ist.Exit.jk == Ijk_Boring)
                          || (st->Ist.Exit.jk == Ijk_Call)
                          || (st->Ist.Exit.jk == Ijk_Ret);
             if (!guest_exit)
               break;
-            IRType tyW = hWordTy;
-            IROp widen = tyW == Ity_I32 ? Iop_1Uto32 : Iop_1Uto64;
-            IRTemp guard1 = newIRTemp (sbOut->tyenv, Ity_I1);
-            IRTemp guardW = newIRTemp (sbOut->tyenv, tyW);
-            IRTemp guard = newIRTemp (sbOut->tyenv, tyW);
 
-            /* Widen the guard expression. */
-            addStmtToIRSB (sbOut, IRStmt_WrTmp (guard1, st->Ist.Exit.guard));
-            addStmtToIRSB (
-                sbOut,
-                IRStmt_WrTmp (guardW,
-                              IRExpr_Unop (widen, IRExpr_RdTmp (guard1))));
-            /* If the exit is inverted, invert the sense of the guard. */
-            addStmtToIRSB (sbOut, IRStmt_WrTmp (guard, IRExpr_RdTmp (guardW)));
-            add_host_function_helper_2 (sbOut, "guest_bc_entry",
-                                        VG_ (fnptr_to_fnentry)(guest_bc_entry),
-                                        IRExpr_RdTmp (guard),
-                                        mkIRExpr_HWord (st->Ist.Exit.jk));
+            args = mkIRExprVec_1 (mkIRExpr_HWord (st->Ist.Exit.jk));
+
+            di = emptyIRDirty ();
+            di->cee = mkIRCallee (1, "guest_bc_entry",
+                                  VG_ (fnptr_to_fnentry)(guest_bc_entry));
+            di->guard = st->Ist.Exit.guard;
+            di->args = args;
+            addStmtToIRSB (sbOut, IRStmt_Dirty (di));
           }
         default:
           break;
