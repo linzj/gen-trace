@@ -54,6 +54,7 @@
 
 static ThreadId s_tid;
 static int s_max_stack = 15;
+static int s_min_interval = 10;
 #define HASH_CONSTANT 256
 
 struct MyNode
@@ -303,7 +304,7 @@ ctrace_struct_submit (struct CTraceStruct *c, struct ThreadInfo *tinfo)
 {
   HChar buf[256];
   struct Record *r;
-  if (c->end_time_ - c->start_time_ <= 10)
+  if (c->end_time_ - c->start_time_ <= s_min_interval)
     return;
 
   buf[0] = 0;
@@ -606,6 +607,9 @@ gt_process_cmd_line_option (const HChar *arg)
   if (VG_INT_CLO (arg, "--max-stack", s_max_stack))
     {
     }
+  if (VG_INT_CLO (arg, "--min-interval", s_min_interval))
+    {
+    }
   return True;
 }
 
@@ -618,7 +622,9 @@ static void
 gt_print_usage (void)
 {
   VG_ (printf)("\t--max-stack: Used to specify a max stack size. This option\n"
-               "\t             effects the size of trace output.\n");
+               "\t             effects the size of trace output.\n"
+               "\t--min-interval: Used to specify a the minium interval. No\n"
+               "\t             interval should less than what you specify.\n");
 }
 static void
 gt_pre_clo_init (void)
