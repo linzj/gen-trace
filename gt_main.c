@@ -55,6 +55,10 @@
 static ThreadId s_tid;
 static int s_max_stack = 15;
 static int s_min_interval = 10;
+// Estimated time facility.
+static Bool s_use_estimated_time = False;
+// Global last time.
+static int64_t s_last_time = 0;
 #define HASH_CONSTANT 256
 
 struct MyNode
@@ -119,29 +123,6 @@ find_string (const HChar *str)
   return new_string (str, lookup_node.super.key);
 }
 
-static int64_t
-GetTimesFromClock (int clockid)
-{
-  struct timespec ts_thread;
-  int64_t ret;
-  static const int64_t kMillisecondsPerSecond = 1000;
-  static const int64_t kMicrosecondsPerMillisecond = 1000;
-  static const int64_t kMicrosecondsPerSecond = kMicrosecondsPerMillisecond
-                                                * kMillisecondsPerSecond;
-  static const int64_t kNanosecondsPerMicrosecond = 1000;
-
-  static int64_t last_time;
-  extern SysRes VG_ (do_syscall)(UWord sysno, UWord, UWord, UWord, UWord,
-                                 UWord, UWord);
-  VG_ (do_syscall)(__NR_clock_gettime, clockid, (UWord)&ts_thread, 0, 0, 0, 0);
-  ret = ((int64_t)(ts_thread.tv_sec) * kMicrosecondsPerSecond)
-        + ((int64_t)(ts_thread.tv_nsec) / kNanosecondsPerMicrosecond);
-  if (last_time >= ret)
-    return (last_time += 1);
-  last_time = ret;
-  return ret;
-}
-
 struct CTraceStruct
 {
   int64_t start_time_;
@@ -158,6 +139,7 @@ struct ThreadInfo
   HWord last_jumpkind_;
   HWord last_addr_;
   Word bc_jumpkind_;
+  int64_t estimated_thread_ns_;
 };
 
 #define MAX_THREAD_INFO (1000)
@@ -165,6 +147,43 @@ struct ThreadInfo s_thread_info[MAX_THREAD_INFO];
 
 static void overwrite_empty_fnname (HChar buf[256], HWord addr);
 
+// Timing facility.
+static int64_t
+GetTimesFromClock_ (int clockid)
+{
+  struct timespec ts_thread;
+  int64_t ret;
+  static const int64_t kMillisecondsPerSecond = 1000;
+  static const int64_t kMicrosecondsPerMillisecond = 1000;
+  static const int64_t kMicrosecondsPerSecond = kMicrosecondsPerMillisecond
+                                                * kMillisecondsPerSecond;
+  static const int64_t kNanosecondsPerMicrosecond = 1000;
+
+  extern SysRes VG_ (do_syscall)(UWord sysno, UWord, UWord, UWord, UWord,
+                                 UWord, UWord);
+  VG_ (do_syscall)(__NR_clock_gettime, clockid, (UWord)&ts_thread, 0, 0, 0, 0);
+  ret = ((int64_t)(ts_thread.tv_sec) * kMicrosecondsPerSecond)
+        + ((int64_t)(ts_thread.tv_nsec) / kNanosecondsPerMicrosecond);
+  if (s_last_time >= ret)
+    return (s_last_time += 1);
+  s_last_time = ret;
+  return ret;
+}
+
+static int64_t
+GetTimesFromClock (struct ThreadInfo *tinfo)
+{
+  if (s_use_estimated_time)
+    {
+      int64_t ret = tinfo->estimated_thread_ns_ / 1000;
+      tinfo->estimated_thread_ns_ += 1000;
+      return ret;
+    }
+  else
+    {
+      return GetTimesFromClock_ (CLOCK_MONOTONIC);
+    }
+}
 static struct CTraceStruct *
 thread_info_pop (struct ThreadInfo *info, HWord last_addr)
 {
@@ -176,7 +195,7 @@ thread_info_pop (struct ThreadInfo *info, HWord last_addr)
 
   target = &info->stack_[info->stack_end_];
 
-  target->end_time_ = GetTimesFromClock (CLOCK_MONOTONIC);
+  target->end_time_ = GetTimesFromClock (info);
   // {
   //   HWord addr = target->last_;
   //   HChar buf1[256], buf2[256];
@@ -204,7 +223,7 @@ thread_info_push (struct ThreadInfo *info, HWord addr)
   index = info->stack_end_ - 1;
   target = &info->stack_[index];
   target->last_ = addr;
-  target->start_time_ = GetTimesFromClock (CLOCK_MONOTONIC);
+  target->start_time_ = GetTimesFromClock (info);
 
   // {
   //   HChar buf[256];
@@ -342,21 +361,13 @@ get_thread_info (void)
       ret->stack_ = VG_ (malloc)("gentrace.stack",
                                  sizeof (struct CTraceStruct) * s_max_stack);
       ret->bc_jumpkind_ = Ijk_INVALID;
+      if (s_use_estimated_time)
+        {
+          ret->estimated_thread_ns_ = GetTimesFromClock_ (CLOCK_MONOTONIC)
+                                      * 1000;
+        }
     }
   return ret;
-}
-
-static Bool
-is_function_named (const HChar *name, HWord addr)
-{
-  HChar buf[256];
-  buf[0] = 0;
-  if (VG_ (get_fnname)(addr, buf, 256))
-    {
-      if (VG_ (strstr)(buf, name) == buf)
-        return True;
-    }
-  return False;
 }
 
 static void
@@ -386,12 +397,9 @@ handle_ret_entry (HWord addr)
   ctrace_struct_submit (c, tinfo);
 }
 
-static VG_REGPARM (2) void guest_sb_entry (HWord addr, HWord jumpkind)
+static void
+guest_sb_entry_worker (struct ThreadInfo *tinfo, HWord addr, HWord jumpkind)
 {
-  struct ThreadInfo *tinfo;
-  tinfo = get_thread_info ();
-  if (!tinfo)
-    return;
   HWord last_jumpkind = tinfo->last_jumpkind_;
   HWord last_addr = tinfo->last_addr_;
   Word bc_jumpkind = tinfo->bc_jumpkind_;
@@ -413,9 +421,44 @@ static VG_REGPARM (2) void guest_sb_entry (HWord addr, HWord jumpkind)
     case Ijk_Call:
       handle_call_entry (addr);
       break;
+    case Ijk_Sys_syscall:
+    case Ijk_Sys_int32:
+    case Ijk_Sys_int128:
+    case Ijk_Sys_int129:
+    case Ijk_Sys_int130:
+    case Ijk_Sys_sysenter:
+      // Update the thread time after a syscall.
+      if (s_use_estimated_time)
+        {
+          int64_t nowms = GetTimesFromClock_ (CLOCK_MONOTONIC);
+          int64_t nowns = nowms * 1000;
+          if (nowns > tinfo->estimated_thread_ns_)
+            tinfo->estimated_thread_ns_ = nowns;
+        }
     default:
       break;
     }
+}
+
+static VG_REGPARM (2) void guest_sb_entry (HWord addr, HWord jumpkind)
+{
+  struct ThreadInfo *tinfo;
+  tinfo = get_thread_info ();
+  if (!tinfo)
+    return;
+  guest_sb_entry_worker (tinfo, addr, jumpkind);
+}
+
+static VG_REGPARM (3) void guest_sb_entry_estimated (HWord addr,
+                                                     HWord jumpkind,
+                                                     HWord size)
+{
+  struct ThreadInfo *tinfo;
+  tinfo = get_thread_info ();
+  if (!tinfo)
+    return;
+  tinfo->estimated_thread_ns_ += size << 1;
+  guest_sb_entry_worker (tinfo, addr, jumpkind);
 }
 
 static VG_REGPARM (1) void guest_bc_entry (HWord jumpkind)
@@ -467,6 +510,19 @@ add_host_function_helper_2 (IRSB *sbOut, const char *str, void *func,
   addStmtToIRSB (sbOut, IRStmt_Dirty (di));
 }
 
+static void
+add_host_function_helper_3 (IRSB *sbOut, const char *str, void *func,
+                            IRExpr *r1, IRExpr *r2, IRExpr *r3)
+{
+  IRDirty *di;
+  IRExpr **argv;
+
+  argv = mkIRExprVec_3 (r1, r2, r3);
+
+  di = unsafeIRDirty_0_N (3, str, func, argv);
+  addStmtToIRSB (sbOut, IRStmt_Dirty (di));
+}
+
 static IRSB *
 gt_instrument (VgCallbackClosure *closure, IRSB *sbIn, VexGuestLayout *layout,
                VexGuestExtents *vge, VexArchInfo *archinfo_host,
@@ -497,11 +553,23 @@ gt_instrument (VgCallbackClosure *closure, IRSB *sbIn, VexGuestLayout *layout,
                 // "
                 //              "%lx, %0x\n",
                 //              cia, sbIn->jumpkind);
-                add_host_function_helper_2 (
-                    sbOut, "guest_sb_entry",
-                    VG_ (fnptr_to_fnentry)(guest_sb_entry),
-                    mkIRExpr_HWord (cia + st->Ist.IMark.delta),
-                    mkIRExpr_HWord (sbIn->jumpkind));
+                if (s_use_estimated_time)
+                  {
+                    add_host_function_helper_3 (
+                        sbOut, "guest_sb_entry_estimated",
+                        VG_ (fnptr_to_fnentry)(guest_sb_entry_estimated),
+                        mkIRExpr_HWord (cia + st->Ist.IMark.delta),
+                        mkIRExpr_HWord (sbIn->jumpkind),
+                        mkIRExpr_HWord (sbIn->stmts_used));
+                  }
+                else
+                  {
+                    add_host_function_helper_2 (
+                        sbOut, "guest_sb_entry",
+                        VG_ (fnptr_to_fnentry)(guest_sb_entry),
+                        mkIRExpr_HWord (cia + st->Ist.IMark.delta),
+                        mkIRExpr_HWord (sbIn->jumpkind));
+                  }
                 has_inject_sb_entry = True;
               }
           }
@@ -563,7 +631,7 @@ flush_thread_info (void)
         {
           int64_t end_time;
 
-          end_time = GetTimesFromClock (CLOCK_MONOTONIC);
+          end_time = GetTimesFromClock (info);
           if (info->stack_end_ > s_max_stack)
             info->stack_end_ = s_max_stack;
           while (info->stack_end_ > 0)
@@ -610,6 +678,9 @@ gt_process_cmd_line_option (const HChar *arg)
   if (VG_INT_CLO (arg, "--min-interval", s_min_interval))
     {
     }
+  if (VG_BOOL_CLO (arg, "--use-estimated-time", s_use_estimated_time))
+    {
+    }
   return True;
 }
 
@@ -621,10 +692,12 @@ gt_print_debug_usage (void)
 static void
 gt_print_usage (void)
 {
-  VG_ (printf)("\t--max-stack: Used to specify a max stack size. This option\n"
-               "\t             effects the size of trace output.\n"
-               "\t--min-interval: Used to specify a the minium interval. No\n"
-               "\t             interval should less than what you specify.\n");
+  VG_ (printf)(
+      "\t--max-stack: Used to specify a max stack size. This option\n"
+      "\t             effects the size of trace output.\n"
+      "\t--use-estimated-time: Use estimated time instead of real time.\n"
+      "\t--min-interval: Used to specify a the minium interval. No\n"
+      "\t             interval should less than what you specify.\n");
 }
 static void
 gt_pre_clo_init (void)
