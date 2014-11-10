@@ -225,7 +225,7 @@ GetThreadInfo ()
   ThreadInfo *tinfo = _GetThreadInfo ();
   if (tinfo->blocked_)
     {
-      tinfo->UpdateCurrentTime();
+      tinfo->UpdateCurrentTime ();
       tinfo->UpdateCurrentTimeThreadSys ();
       sigset_t unblock_set;
       sigemptyset (&unblock_set);
@@ -510,8 +510,7 @@ __start_ctrace__ (void *c, const char *name)
       // always update the time in the first entry.
       // Or if it sleep too long, will make this entry looks
       // very time consuming.
-      tinfo->UpdateCurrentTimeThreadSys ();
-      tinfo->UpdateCurrentTime();
+      tinfo->UpdateCurrentTime ();
     }
   if (tinfo->stack_end_ < ThreadInfo::max_stack)
     {
