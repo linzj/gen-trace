@@ -32,10 +32,11 @@ namespace
 {
 pthread_key_t thread_info_key;
 FILE *file_to_write;
-static const uint64_t invalid_time = static_cast<uint64_t> (-1);
+static const int64_t invalid_time = static_cast<int64_t> (-1);
 static const int frequency = 100;
 static const int ticks = 1;
 static const int max_idle_times = 1000;
+static volatile int64_t s_time = 0;
 
 // for WriterThread
 pthread_mutex_t writer_waitup_mutex = PTHREAD_MUTEX_INITIALIZER;
@@ -84,10 +85,10 @@ struct ucontext
 
 struct CTraceStruct
 {
-  uint64_t start_time_;
-  uint64_t min_end_time_;
-  uint64_t start_time_thread_;
-  uint64_t min_end_time_thread_;
+  int64_t start_time_;
+  int64_t min_end_time_;
+  int64_t start_time_thread_;
+  int64_t min_end_time_thread_;
   const char *name_;
   CTraceStruct (const char *);
 };
@@ -99,12 +100,13 @@ struct ThreadInfo
   int tid_;
   CTraceStruct *stack_[max_stack];
   int stack_end_;
-  uint64_t current_time_;
-  uint64_t current_time_thread_;
+  int64_t current_time_;
+  int64_t current_time_thread_;
   int idle_times_;
   bool blocked_;
   ThreadInfo ();
   void UpdateCurrentTime ();
+  void UpdateCurrentTimeThreadSys ();
   void UpdateCurrentTimeThread ();
   void SetBlocked ();
   static ThreadInfo *New ();
@@ -134,18 +136,24 @@ ThreadInfo::Find ()
   return static_cast<ThreadInfo *> (pthread_getspecific (thread_info_key));
 }
 
-uint64_t GetTimesFromClock (int clockid);
+int64_t GetTimesFromClock (int clockid);
 
 void
 ThreadInfo::UpdateCurrentTime ()
 {
-  current_time_ = GetTimesFromClock (CLOCK_MONOTONIC);
+  current_time_ = s_time;
+}
+
+void
+ThreadInfo::UpdateCurrentTimeThreadSys ()
+{
+  current_time_thread_ = GetTimesFromClock (CLOCK_THREAD_CPUTIME_ID);
 }
 
 void
 ThreadInfo::UpdateCurrentTimeThread ()
 {
-  current_time_thread_ = GetTimesFromClock (CLOCK_THREAD_CPUTIME_ID);
+  current_time_thread_ += frequency;
 }
 
 ThreadInfo *
@@ -195,7 +203,7 @@ _GetThreadInfo ()
   return tinfo;
 }
 
-uint64_t
+int64_t
 GetTimesFromClock (int clockid)
 {
   static const int64_t kMillisecondsPerSecond = 1000;
@@ -206,8 +214,8 @@ GetTimesFromClock (int clockid)
 
   struct timespec ts_thread;
   clock_gettime (clockid, &ts_thread);
-  return (static_cast<uint64_t> (ts_thread.tv_sec) * kMicrosecondsPerSecond)
-         + (static_cast<uint64_t> (ts_thread.tv_nsec)
+  return (static_cast<int64_t> (ts_thread.tv_sec) * kMicrosecondsPerSecond)
+         + (static_cast<int64_t> (ts_thread.tv_nsec)
             / kNanosecondsPerMicrosecond);
 }
 
@@ -217,8 +225,8 @@ GetThreadInfo ()
   ThreadInfo *tinfo = _GetThreadInfo ();
   if (tinfo->blocked_)
     {
-      tinfo->UpdateCurrentTime ();
-      tinfo->UpdateCurrentTimeThread ();
+      tinfo->UpdateCurrentTime();
+      tinfo->UpdateCurrentTimeThreadSys ();
       sigset_t unblock_set;
       sigemptyset (&unblock_set);
       sigaddset (&unblock_set, SIGPROF);
@@ -256,13 +264,14 @@ MyHandler (int, siginfo_t *, void *context)
       sigaddset (&static_cast<ucontext *> (context)->uc_sigmask, SIGPROF);
       return;
     }
-  uint64_t old_time = tinfo->current_time_;
-  tinfo->UpdateCurrentTime ();
-  uint64_t current_time = tinfo->current_time_;
 
-  uint64_t old_time_thread = tinfo->current_time_thread_;
+  int64_t old_time = tinfo->current_time_;
+  tinfo->UpdateCurrentTime ();
+  int64_t current_time = tinfo->current_time_;
+
+  int64_t old_time_thread = tinfo->current_time_thread_;
   tinfo->UpdateCurrentTimeThread ();
-  uint64_t current_time_thread = tinfo->current_time_thread_;
+  int64_t current_time_thread = tinfo->current_time_thread_;
 
   if (tinfo->stack_end_ >= ThreadInfo::max_stack)
     {
@@ -300,6 +309,8 @@ MyHandler (int, siginfo_t *, void *context)
 
 void *WriterThread (void *);
 
+static void timer_func (union sigval) { s_time += frequency; }
+
 struct Initializer
 {
   void
@@ -323,21 +334,41 @@ struct Initializer
     pthread_key_create (&thread_info_key, DeleteThreadInfo);
     InitFreeList ();
     struct sigaction myaction = { 0 };
-    struct itimerval timer;
+    struct itimerval timerval;
     myaction.sa_sigaction = MyHandler;
     myaction.sa_flags = SA_SIGINFO;
     sigaction (SIGPROF, &myaction, NULL);
 
-    timer.it_value.tv_sec = 0;
-    timer.it_value.tv_usec = frequency;
-    timer.it_interval = timer.it_value;
-    setitimer (ITIMER_PROF, &timer, NULL);
+    timerval.it_value.tv_sec = 0;
+    timerval.it_value.tv_usec = frequency;
+    timerval.it_interval = timerval.it_value;
+    setitimer (ITIMER_PROF, &timerval, NULL);
     char buffer[256];
     sprintf (buffer, CTRACE_FILE_NAME, getpid ());
     file_to_write = fopen (buffer, "w");
     fprintf (file_to_write, "{\"traceEvents\": [");
     pthread_t my_writer_thread;
     pthread_create (&my_writer_thread, NULL, WriterThread, NULL);
+    // time initialize, the thread_timer is used to update s_time in a pthread.
+    timer_t thread_timer;
+
+    s_time = GetTimesFromClock (CLOCK_MONOTONIC);
+    struct sigevent sev = { 0 };
+    sev.sigev_notify = SIGEV_THREAD;
+    sev.sigev_notify_function = timer_func;
+    if (0 != timer_create (CLOCK_MONOTONIC, &sev, &thread_timer))
+      {
+        CRASH ();
+      }
+    struct itimerspec timerspec;
+    timerspec.it_value.tv_sec = 0;
+    timerspec.it_value.tv_nsec = frequency * 1000;
+    timerspec.it_interval = timerspec.it_value;
+
+    if (0 != timer_settime (thread_timer, 0, &timerspec, NULL))
+      {
+        CRASH ();
+      }
   }
 
   ~Initializer () { fclose (file_to_write); }
@@ -349,10 +380,10 @@ struct Record
 {
   int pid_;
   int tid_;
-  uint64_t start_time_;
-  uint64_t dur_;
-  uint64_t start_time_thread_;
-  uint64_t dur_thread_;
+  int64_t start_time_;
+  int64_t dur_;
+  int64_t start_time_thread_;
+  int64_t dur_thread_;
   const char *name_;
   struct Record *next_;
 };
@@ -479,7 +510,8 @@ __start_ctrace__ (void *c, const char *name)
       // always update the time in the first entry.
       // Or if it sleep too long, will make this entry looks
       // very time consuming.
-      tinfo->UpdateCurrentTime ();
+      tinfo->UpdateCurrentTimeThreadSys ();
+      tinfo->UpdateCurrentTime();
     }
   if (tinfo->stack_end_ < ThreadInfo::max_stack)
     {
@@ -499,22 +531,17 @@ __end_ctrace__ (CTraceStruct *c, const char *name)
     {
       if (c->start_time_ != invalid_time)
         {
-          if (tinfo->stack_end_ == 0)
-            {
-              tinfo->UpdateCurrentTime ();
-              c->min_end_time_ = tinfo->current_time_ + ticks;
-            }
           // we should record this
-          RecordThis (c, tinfo);
+          if (c->min_end_time_ - c->start_time_ > 0
+              && c->min_end_time_thread_ - c->start_time_thread_ > 0)
+            RecordThis (c, tinfo);
           if (tinfo->stack_end_ != 0)
             {
               // propagate the back's mini end time
               tinfo->stack_[tinfo->stack_end_ - 1]->min_end_time_
-                  = c->min_end_time_ + ticks;
+                  = c->min_end_time_;
               tinfo->stack_[tinfo->stack_end_ - 1]->min_end_time_thread_
-                  = c->min_end_time_thread_ + ticks;
-              tinfo->current_time_ += ticks;
-              tinfo->current_time_thread_ += ticks;
+                  = c->min_end_time_thread_;
             }
         }
     }
