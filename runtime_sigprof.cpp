@@ -342,6 +342,11 @@ struct Initializer
     timerval.it_value.tv_sec = 0;
     timerval.it_value.tv_usec = frequency;
     timerval.it_interval = timerval.it_value;
+#ifdef __ANDROID__
+    // Special workaround for Android platform.
+    // Some graphic driver will be screwed up if not so.
+    timerval.it_value.tv_sec = 5;
+#endif // __ANDROID__
     setitimer (ITIMER_PROF, &timerval, NULL);
     char buffer[256];
     sprintf (buffer, CTRACE_FILE_NAME, getpid ());
