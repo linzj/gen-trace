@@ -137,7 +137,6 @@ ThreadInfo::UpdateVirtualTime (bool fromStart)
 
 CTraceStruct::CTraceStruct (const char *name, int64_t start_time)
 {
-  start_time_ = invalid_time;
   name_ = name;
   start_time_ = start_time;
 }
