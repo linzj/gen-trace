@@ -6,6 +6,22 @@ class ParseException(Exception):
 class RecordException(Exception):
     pass
 
+def fixupStack(stack):
+    reverseStart = 0
+    lastWall = stack[-1][3]
+
+    for item in reversed(stack):
+        if item[3] == lastWall:
+            reverseStart -= 1
+        else:
+            break
+
+    if reverseStart == -1:
+        return
+    count = 1
+    for i in range(reverseStart + 1, 0):
+        stack[i][3] += count
+        count += 1
 
 class Recorder(object):
     def __init__(self, writer):
@@ -22,7 +38,7 @@ class Recorder(object):
             else:
                 stack = []
                 self.m_stacks[tid] = stack
-            stack.append((tid, methodAddress, threadTime, wallTime,))
+            stack.append([tid, methodAddress, threadTime, wallTime,])
         else:
             if not tid in self.m_stacks:
                 return
@@ -32,6 +48,7 @@ class Recorder(object):
             topMethodAddress = stack[-1][1]
             if topMethodAddress != methodAddress:
                 raise RecordException("invalid record: unmatched method address")
+            fixupStack(stack)
             threadStart = stack[-1][2]
             threadDur = threadTime - threadStart
             wallStart = stack[-1][3]
@@ -91,7 +108,7 @@ class Parser(object):
        self.workoutHeader()
        self.workoutThreads()
        self.workoutMethods()
-       self.workoutRecords() 
+       self.workoutRecords()
        self.m_writer.end()
 
     def nextLine(self):
