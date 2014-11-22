@@ -50,8 +50,6 @@ class Writer(object):
             self.m_outputFile.write(',')
         else:
             self.m_needComma = True
-        if not functionName:
-            functionName = "Unknown"
         self.m_curTime += 1
         endTime = self.m_curTime
 
