@@ -29,10 +29,16 @@ class Writer(object):
                 self.recordTop()
                 self.pop()
         elif depth > self.m_curDepth:
+            while depth > self.m_curDepth + 1:
+  #for case :
+  #18:                  } -> 0x17993e104141 <true>
+  #21:                     make_unary+23
+                self.pushEntry(None)
             self.pushEntry(functionName)
         curDepth = self.m_curDepth
         if curDepth != depth and curDepth != depth - 1:
-            raise ParseException("self.m_curDepth = %d, depth = %d" % (curDepth, depth))
+            global lineCount
+            raise ParseException("self.m_curDepth = %d, depth = %d, lineCount = %d" % (curDepth, depth, lineCount))
 
     def writeHeader(self):
         self.m_outputFile.write('{"traceEvents":[')
@@ -49,7 +55,8 @@ class Writer(object):
         self.m_curTime += 1
         endTime = self.m_curTime
 
-        self.m_outputFile.write('{"cat":"profile","pid":1,"ts":%d,"ph":"X","name":"%s","dur":%d}' % (startTime, functionName, endTime - startTime))
+        if functionName:
+            self.m_outputFile.write('{"cat":"profile","pid":1,"ts":%d,"ph":"X","name":"%s","dur":%d}' % (startTime, functionName, endTime - startTime))
 
     def pop(self):
         self.m_stack.pop()
@@ -80,12 +87,10 @@ def parse(inputFile):
         line = inputFile.readline()
         if not line:
             return None
+        lineCount += 1
         m = lineRe.match(line)
         if m:
             break
-    # print ""
-    # print "line #%d" % lineCount
-    lineCount += 1
     return (int(m.group(1)), m.group(2))
 
 def doWork(inputFile, outputFile):
@@ -97,8 +102,6 @@ def doWork(inputFile, outputFile):
         w.handleEntry(entry)
     w.end()
     
-
-
 def main():
     if len(sys.argv) < 2:
         usage()
