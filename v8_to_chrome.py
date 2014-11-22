@@ -46,6 +46,8 @@ class Writer(object):
     def recordTop(self):
         entry = self.m_stack[-1]
         functionName, startTime = entry
+        if not functionName:
+            return
         if self.m_needComma:
             self.m_outputFile.write(',')
         else:
@@ -53,8 +55,7 @@ class Writer(object):
         self.m_curTime += 1
         endTime = self.m_curTime
 
-        if functionName:
-            self.m_outputFile.write('{"cat":"profile","pid":1,"ts":%d,"ph":"X","name":"%s","dur":%d}' % (startTime, functionName, endTime - startTime))
+        self.m_outputFile.write('{"cat":"profile","pid":1,"ts":%d,"ph":"X","name":"%s","dur":%d}' % (startTime, functionName, endTime - startTime))
 
     def pop(self):
         self.m_stack.pop()
