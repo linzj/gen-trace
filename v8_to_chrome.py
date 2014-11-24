@@ -1,4 +1,7 @@
 import os, sys, re
+from optparse import OptionParser
+
+MAX_STACK = 50
 
 class ParseException(Exception):
     pass
@@ -44,6 +47,8 @@ class Writer(object):
         self.m_outputFile.write('{"traceEvents":[')
 
     def recordTop(self):
+        if self.m_curDepth >= MAX_STACK:
+            return
         entry = self.m_stack[-1]
         functionName, startTime = entry
         if not functionName:
@@ -58,8 +63,11 @@ class Writer(object):
         self.m_outputFile.write('{"cat":"profile","pid":1,"ts":%d,"ph":"X","name":"%s","dur":%d}' % (startTime, functionName, endTime - startTime))
 
     def pop(self):
-        self.m_stack.pop()
+        if self.m_curDepth <= MAX_STACK:
+            self.m_stack.pop()
         self.m_curDepth -= 1
+        #print >>sys.stderr, "pop:self.m_curDepth = %d, len(self.m_stack) = %d" % (self.m_curDepth, len(self.m_stack))
+        assert self.m_curDepth >= len(self.m_stack)
 
     def end(self):
         self.flush()
@@ -69,6 +77,9 @@ class Writer(object):
     def pushEntry(self, functionName):
         self.m_curTime += 1
         self.m_curDepth += 1
+        #print >>sys.stderr, "push:self.m_curDepth = %d, len(self.m_stack) = %d" % (self.m_curDepth, len(self.m_stack))
+        if self.m_curDepth > MAX_STACK:
+            return
         startTime = self.m_curTime
         self.m_stack.append((functionName, startTime))
 
@@ -102,9 +113,16 @@ def doWork(inputFile, outputFile):
     w.end()
     
 def main():
+    global MAX_STACK
     if len(sys.argv) < 2:
         usage()
-    fileName = sys.argv[1]
+    myoptparser = OptionParser()
+
+    myoptparser.add_option("-s", "--max_stack", help = "specify max stack", action = "store", type = "int", dest = "max_stack")
+    myargTuple = myoptparser.parse_args()
+    if myargTuple[0].max_stack:
+        MAX_STACK = myargTuple[0].max_stack
+    fileName = myargTuple[1][0]
     if not os.path.isfile(fileName):
         usage()
     with open(fileName, 'rb') as inputFile:
