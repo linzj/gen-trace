@@ -1,4 +1,4 @@
-import os, sys, re
+import os, sys, re, signal
 from optparse import OptionParser
 
 MAX_STACK = 50
@@ -105,6 +105,9 @@ def parse(inputFile):
 
 def doWork(inputFile, outputFile):
     w = Writer(outputFile)
+    def end(signum, frame):
+        pass
+    signal.signal(signal.SIGINT, end)
     while True:
         entry = parse(inputFile)
         if not entry:
@@ -114,26 +117,30 @@ def doWork(inputFile, outputFile):
     
 def main():
     global MAX_STACK
-    if len(sys.argv) < 2:
-        usage()
     myoptparser = OptionParser()
 
     myoptparser.add_option("-s", "--max_stack", help = "specify max stack", action = "store", type = "int", dest = "max_stack")
     myargTuple = myoptparser.parse_args()
     if myargTuple[0].max_stack:
         MAX_STACK = myargTuple[0].max_stack
-    fileName = myargTuple[1][0]
-    if not os.path.isfile(fileName):
-        usage()
-    with open(fileName, 'rb') as inputFile:
-        if len(sys.argv) >= 3:
-            outputFileName = sys.argv[2]
-            if not os.path.isdir(outputFileName):
-                with open(outputFileName, 'w') as outputFile:
-                    doWork(inputFile, outputFile)
-                    return
+    if len(myargTuple[1]) >= 1:
+        fileName = myargTuple[1][0]
+    else:
+        fileName = None
+    if fileName:
+        if not os.path.isfile(fileName):
+            usage()
+        with open(fileName, 'rb') as inputFile:
+            if len(sys.argv) >= 3:
+                outputFileName = sys.argv[2]
+                if not os.path.isdir(outputFileName):
+                    with open(outputFileName, 'w') as outputFile:
+                        doWork(inputFile, outputFile)
+                        return
 
-        doWork(inputFile, sys.stdout)
+            doWork(inputFile, sys.stdout)
+    else:
+        doWork(sys.stdin, sys.stdout)
 
 if __name__ == '__main__':
     main()
