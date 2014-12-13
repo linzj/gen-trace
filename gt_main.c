@@ -54,13 +54,6 @@
 #include "gt_time.h"
 #include "gt_config.h"
 
-static ThreadId s_tid;
-static int s_max_stack = 15;
-static int s_min_interval = 10;
-
-#define MAX_THREAD_INFO (1000)
-struct ThreadInfo s_thread_info[MAX_THREAD_INFO];
-
 static void overwrite_empty_fnname (HChar buf[256], HWord addr);
 
 static struct CTraceStruct *
@@ -222,38 +215,11 @@ ctrace_struct_submit (struct CTraceStruct *c, struct ThreadInfo *tinfo)
   s_head = r;
 }
 
-static struct ThreadInfo *
-get_thread_info (void)
-{
-  int index;
-  struct ThreadInfo *ret;
-  if (s_tid > MAX_THREAD_INFO)
-    return NULL;
-  index = s_tid - 1;
-  ret = &s_thread_info[index];
-  if (ret->tid_ == 0)
-    {
-      // initialize it if possible
-      ret->tid_ = s_tid;
-      ret->pid_ = VG_ (getpid)();
-      ret->last_jumpkind_ = Ijk_INVALID;
-      ret->stack_ = VG_ (malloc)("gentrace.stack",
-                                 sizeof (struct CTraceStruct) * s_max_stack);
-      ret->bc_jumpkind_ = Ijk_INVALID;
-      if (s_use_estimated_time)
-        {
-          ret->estimated_thread_ns_
-              = gt_get_times_from_clock_ (CLOCK_MONOTONIC) * 1000;
-        }
-    }
-  return ret;
-}
-
 static void
 handle_call_entry (HWord addr)
 {
   struct ThreadInfo *tinfo;
-  tinfo = get_thread_info ();
+  tinfo = gt_get_thread_info ();
   if (!tinfo)
     return;
   // VG_ (printf)("handle_call_entry : addr = %lx\n", addr);
@@ -266,7 +232,7 @@ handle_ret_entry (HWord addr)
 {
   struct ThreadInfo *tinfo;
   struct CTraceStruct *c;
-  tinfo = get_thread_info ();
+  tinfo = gt_get_thread_info ();
   if (!tinfo)
     return;
   // VG_ (printf)("handle_ret_entry : addr = %lx\n", addr);
@@ -322,7 +288,7 @@ guest_sb_entry_worker (struct ThreadInfo *tinfo, HWord addr, HWord jumpkind)
 static VG_REGPARM (2) void guest_sb_entry (HWord addr, HWord jumpkind)
 {
   struct ThreadInfo *tinfo;
-  tinfo = get_thread_info ();
+  tinfo = gt_get_thread_info ();
   if (!tinfo)
     return;
   guest_sb_entry_worker (tinfo, addr, jumpkind);
@@ -333,7 +299,7 @@ static VG_REGPARM (3) void guest_sb_entry_estimated (HWord addr,
                                                      HWord size)
 {
   struct ThreadInfo *tinfo;
-  tinfo = get_thread_info ();
+  tinfo = gt_get_thread_info ();
   if (!tinfo)
     return;
   tinfo->estimated_thread_ns_ += size << 1;
@@ -343,16 +309,10 @@ static VG_REGPARM (3) void guest_sb_entry_estimated (HWord addr,
 static VG_REGPARM (1) void guest_bc_entry (HWord jumpkind)
 {
   struct ThreadInfo *tinfo;
-  tinfo = get_thread_info ();
+  tinfo = gt_get_thread_info ();
   if (!tinfo)
     return;
   tinfo->bc_jumpkind_ = jumpkind;
-}
-
-static void
-gt_start_client_code_callback (ThreadId tid, ULong blocks_done)
-{
-  s_tid = tid;
 }
 
 static void
@@ -592,7 +552,7 @@ gt_pre_clo_init (void)
 
   VG_ (basic_tool_funcs)(gt_post_clo_init, gt_instrument, gt_fini);
 
-  VG_ (track_start_client_code)(&gt_start_client_code_callback);
+  gt_thread_info_init ();
 
   VG_ (needs_command_line_options)(gt_process_cmd_line_option, gt_print_usage,
                                    gt_print_debug_usage);
