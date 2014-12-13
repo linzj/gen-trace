@@ -1,10 +1,19 @@
+#include "valgrind.h"
+#include "pub_tool_basics.h"
+#include <stdint.h>
+#include <time.h>
 #include <sys/syscall.h>
 
 #include "gt_threadinfo.h"
 #include "gt_time.h"
+#include "gt_config.h"
 
 // Timing facility.
-static int64_t
+
+// Global last time.
+static int64_t s_last_time = 0;
+
+int64_t
 gt_get_times_from_clock_ (int clockid)
 {
   struct timespec ts_thread;
@@ -26,7 +35,7 @@ gt_get_times_from_clock_ (int clockid)
   return ret;
 }
 
-static int64_t
+int64_t
 gt_get_times_from_clock (struct ThreadInfo *tinfo)
 {
   if (s_use_estimated_time)

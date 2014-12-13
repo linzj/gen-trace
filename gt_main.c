@@ -52,14 +52,11 @@
 #include "gt_string.h"
 #include "gt_threadinfo.h"
 #include "gt_time.h"
+#include "gt_config.h"
 
 static ThreadId s_tid;
 static int s_max_stack = 15;
 static int s_min_interval = 10;
-// Estimated time facility.
-static Bool s_use_estimated_time = False;
-// Global last time.
-static int64_t s_last_time = 0;
 
 #define MAX_THREAD_INFO (1000)
 struct ThreadInfo s_thread_info[MAX_THREAD_INFO];
