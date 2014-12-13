@@ -36,7 +36,6 @@
 #include "pub_tool_debuginfo.h"
 #include "pub_tool_machine.h"
 #include "pub_tool_libcbase.h"
-#include "pub_tool_hashtable.h"
 #include "pub_tool_mallocfree.h"
 #include "pub_tool_libcproc.h"
 #include "pub_tool_libcfile.h"
@@ -52,6 +51,8 @@
 
 #include <sys/syscall.h>
 
+#include "gt_string.h"
+
 static ThreadId s_tid;
 static int s_max_stack = 15;
 static int s_min_interval = 10;
@@ -61,67 +62,6 @@ static Bool s_use_estimated_time = False;
 static int64_t s_last_time = 0;
 #define HASH_CONSTANT 256
 
-struct MyNode
-{
-  VgHashNode super;
-  HChar str[1];
-};
-
-struct MyLookupNode
-{
-  VgHashNode super;
-  const HChar *str;
-};
-
-static UWord
-str_hash (const HChar *s)
-{
-  UWord hash_value = 0;
-  for (; *s; s++)
-    hash_value = (HASH_CONSTANT * hash_value + *s);
-  return hash_value;
-}
-
-static Word
-lookup_func (const void *node1, const void *node2)
-{
-  const struct MyLookupNode *lookup = node1;
-  const struct MyNode *node = node2;
-  return VG_ (strcmp)(lookup->str, (char *)node->str);
-}
-
-static VgHashTable s_string_hash_table;
-
-static HChar *
-new_string (const HChar *str, Word key)
-{
-  int len;
-  struct MyNode *new_node;
-
-  len = VG_ (strlen)(str);
-  new_node = VG_ (malloc)("gentrace.fnname", sizeof (struct MyNode) + len + 1);
-  new_node->super.key = key;
-  new_node->super.next = 0;
-  VG_ (strcpy)(new_node->str, str);
-  VG_ (HT_add_node)(s_string_hash_table, new_node);
-  return new_node->str;
-}
-
-static HChar *
-find_string (const HChar *str)
-{
-  struct MyLookupNode lookup_node;
-  struct MyNode *found;
-  lookup_node.super.key = str_hash (str);
-  lookup_node.str = str;
-
-  found = VG_ (HT_gen_lookup)(s_string_hash_table, &lookup_node, lookup_func);
-  if (found)
-    {
-      return found->str;
-    }
-  return new_string (str, lookup_node.super.key);
-}
 
 struct CTraceStruct
 {
@@ -334,7 +274,7 @@ ctrace_struct_submit (struct CTraceStruct *c, struct ThreadInfo *tinfo)
   r->pid_ = tinfo->pid_;
   r->tid_ = tinfo->tid_;
   r->start_time_ = c->start_time_;
-  r->name_ = find_string (buf);
+  r->name_ = gt_find_string (buf);
   if (c->end_time_ > c->start_time_)
     r->dur_ = c->end_time_ - c->start_time_;
   else
@@ -494,7 +434,7 @@ gt_post_clo_init (void)
       VG_ (clo_vex_control).guest_chase_thresh = 0; // cannot be overriden.
     }
   VG_ (message)(Vg_UserMsg, "max stack = %d\n", s_max_stack);
-  s_string_hash_table = VG_ (HT_construct)("fnname table");
+  gt_init_string();
 }
 
 static void
@@ -666,7 +606,7 @@ gt_fini (Int exitcode)
       VG_ (write)(output, end, sizeof (end) - 1);
       VG_ (close)(output);
     }
-  VG_ (HT_destruct)(s_string_hash_table, VG_ (free));
+  gt_destroy_string();
 }
 
 static Bool
