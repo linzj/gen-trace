@@ -49,9 +49,9 @@
 #include <time.h>
 #include <alloca.h>
 
-#include <sys/syscall.h>
-
 #include "gt_string.h"
+#include "gt_threadinfo.h"
+#include "gt_time.h"
 
 static ThreadId s_tid;
 static int s_max_stack = 15;
@@ -61,67 +61,11 @@ static Bool s_use_estimated_time = False;
 // Global last time.
 static int64_t s_last_time = 0;
 
-struct CTraceStruct
-{
-  int64_t start_time_;
-  int64_t end_time_;
-  HWord last_;
-};
-
-struct ThreadInfo
-{
-  int pid_;
-  int tid_;
-  struct CTraceStruct *stack_;
-  int stack_end_;
-  HWord last_jumpkind_;
-  HWord last_addr_;
-  Word bc_jumpkind_;
-  int64_t estimated_thread_ns_;
-};
-
 #define MAX_THREAD_INFO (1000)
 struct ThreadInfo s_thread_info[MAX_THREAD_INFO];
 
 static void overwrite_empty_fnname (HChar buf[256], HWord addr);
 
-// Timing facility.
-static int64_t
-GetTimesFromClock_ (int clockid)
-{
-  struct timespec ts_thread;
-  int64_t ret;
-  static const int64_t kMillisecondsPerSecond = 1000;
-  static const int64_t kMicrosecondsPerMillisecond = 1000;
-  static const int64_t kMicrosecondsPerSecond = kMicrosecondsPerMillisecond
-                                                * kMillisecondsPerSecond;
-  static const int64_t kNanosecondsPerMicrosecond = 1000;
-
-  extern SysRes VG_ (do_syscall)(UWord sysno, UWord, UWord, UWord, UWord,
-                                 UWord, UWord);
-  VG_ (do_syscall)(__NR_clock_gettime, clockid, (UWord)&ts_thread, 0, 0, 0, 0);
-  ret = ((int64_t)(ts_thread.tv_sec) * kMicrosecondsPerSecond)
-        + ((int64_t)(ts_thread.tv_nsec) / kNanosecondsPerMicrosecond);
-  if (s_last_time >= ret)
-    return (s_last_time += 1);
-  s_last_time = ret;
-  return ret;
-}
-
-static int64_t
-GetTimesFromClock (struct ThreadInfo *tinfo)
-{
-  if (s_use_estimated_time)
-    {
-      int64_t ret = tinfo->estimated_thread_ns_ / 1000;
-      tinfo->estimated_thread_ns_ += 1000;
-      return ret;
-    }
-  else
-    {
-      return GetTimesFromClock_ (CLOCK_MONOTONIC);
-    }
-}
 static struct CTraceStruct *
 thread_info_pop (struct ThreadInfo *info, HWord last_addr)
 {
@@ -133,7 +77,7 @@ thread_info_pop (struct ThreadInfo *info, HWord last_addr)
 
   target = &info->stack_[info->stack_end_];
 
-  target->end_time_ = GetTimesFromClock (info);
+  target->end_time_ = gt_get_times_from_clock (info);
   // {
   //   HWord addr = target->last_;
   //   HChar buf1[256], buf2[256];
@@ -161,7 +105,7 @@ thread_info_push (struct ThreadInfo *info, HWord addr)
   index = info->stack_end_ - 1;
   target = &info->stack_[index];
   target->last_ = addr;
-  target->start_time_ = GetTimesFromClock (info);
+  target->start_time_ = gt_get_times_from_clock (info);
 
   // {
   //   HChar buf[256];
@@ -301,8 +245,8 @@ get_thread_info (void)
       ret->bc_jumpkind_ = Ijk_INVALID;
       if (s_use_estimated_time)
         {
-          ret->estimated_thread_ns_ = GetTimesFromClock_ (CLOCK_MONOTONIC)
-                                      * 1000;
+          ret->estimated_thread_ns_
+              = gt_get_times_from_clock_ (CLOCK_MONOTONIC) * 1000;
         }
     }
   return ret;
@@ -368,7 +312,7 @@ guest_sb_entry_worker (struct ThreadInfo *tinfo, HWord addr, HWord jumpkind)
       // Update the thread time after a syscall.
       if (s_use_estimated_time)
         {
-          int64_t nowms = GetTimesFromClock_ (CLOCK_MONOTONIC);
+          int64_t nowms = gt_get_times_from_clock_ (CLOCK_MONOTONIC);
           int64_t nowns = nowms * 1000;
           if (nowns > tinfo->estimated_thread_ns_)
             tinfo->estimated_thread_ns_ = nowns;
@@ -432,7 +376,7 @@ gt_post_clo_init (void)
       VG_ (clo_vex_control).guest_chase_thresh = 0; // cannot be overriden.
     }
   VG_ (message)(Vg_UserMsg, "max stack = %d\n", s_max_stack);
-  gt_init_string();
+  gt_init_string ();
 }
 
 static void
@@ -569,7 +513,7 @@ flush_thread_info (void)
         {
           int64_t end_time;
 
-          end_time = GetTimesFromClock (info);
+          end_time = gt_get_times_from_clock (info);
           if (info->stack_end_ > s_max_stack)
             info->stack_end_ = s_max_stack;
           while (info->stack_end_ > 0)
@@ -604,7 +548,7 @@ gt_fini (Int exitcode)
       VG_ (write)(output, end, sizeof (end) - 1);
       VG_ (close)(output);
     }
-  gt_destroy_string();
+  gt_destroy_string ();
 }
 
 static Bool
