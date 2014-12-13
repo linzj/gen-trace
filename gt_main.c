@@ -60,8 +60,6 @@ static int s_min_interval = 10;
 static Bool s_use_estimated_time = False;
 // Global last time.
 static int64_t s_last_time = 0;
-#define HASH_CONSTANT 256
-
 
 struct CTraceStruct
 {
