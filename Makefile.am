@@ -11,7 +11,13 @@ if VGCONF_HAVE_PLATFORM_SEC
 noinst_PROGRAMS += gentrace-@VGCONF_ARCH_SEC@-@VGCONF_OS@
 endif
 
-NONE_SOURCES_COMMON = gt_main.c
+NONE_SOURCES_COMMON := gt_main.c \
+					   gt_string.c \
+					   gt_time.c \
+					   gt_config.c \
+					   gt_threadinfo.c \
+					   gt_misc.c \
+					   gt_record.c
 
 gentrace_@VGCONF_ARCH_PRI@_@VGCONF_OS@_SOURCES      = \
 	$(NONE_SOURCES_COMMON)
