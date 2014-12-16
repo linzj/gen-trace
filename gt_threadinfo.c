@@ -12,7 +12,8 @@
 
 static ThreadId s_tid;
 
-struct ThreadInfo s_thread_info[MAX_THREAD_INFO];
+#define MAX_THREAD_INFO (1000)
+static struct ThreadInfo s_thread_info[MAX_THREAD_INFO];
 
 struct ThreadInfo *
 gt_get_thread_info (void)

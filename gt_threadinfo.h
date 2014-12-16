@@ -25,9 +25,6 @@ struct ThreadInfo
 struct ThreadInfo *gt_get_thread_info (void);
 
 void gt_thread_info_init (void);
-// FIXME: to be move to c.
-#define MAX_THREAD_INFO (1000)
-extern struct ThreadInfo s_thread_info[];
 
 struct CTraceStruct *gt_thread_info_pop (struct ThreadInfo *info,
                                          HWord last_addr);
