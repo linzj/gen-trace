@@ -15,7 +15,8 @@ NONE_SOURCES_COMMON := gt_main.c \
 					   gt_string.c \
 					   gt_time.c \
 					   gt_config.c \
-					   gt_threadinfo.c
+					   gt_threadinfo.c \
+					   gt_misc.c
 
 gentrace_@VGCONF_ARCH_PRI@_@VGCONF_OS@_SOURCES      = \
 	$(NONE_SOURCES_COMMON)

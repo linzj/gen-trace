@@ -53,8 +53,7 @@
 #include "gt_threadinfo.h"
 #include "gt_time.h"
 #include "gt_config.h"
-
-static void overwrite_empty_fnname (HChar buf[256], HWord addr);
+#include "gt_misc.h"
 
 struct Record
 {
@@ -125,20 +124,6 @@ DoWriteRecursive (int file_to_write, struct Record *current)
 }
 
 static void
-overwrite_empty_fnname (HChar buf[256], HWord addr)
-{
-  const NSegment *segment;
-  segment = VG_ (am_find_nsegment)(addr);
-  if (!segment)
-    {
-      VG_ (snprintf)(buf, 256, "Unknown: %08lx", addr);
-      return;
-    }
-  VG_ (snprintf)(buf, 256, "%s: %08lx", VG_ (am_get_filename)(segment),
-                 addr - segment->start);
-}
-
-static void
 ctrace_struct_submit (struct CTraceStruct *c, struct ThreadInfo *tinfo)
 {
   HChar buf[256];
@@ -149,7 +134,7 @@ ctrace_struct_submit (struct CTraceStruct *c, struct ThreadInfo *tinfo)
   buf[0] = 0;
   VG_ (get_fnname)(c->last_, buf, 256);
   if (buf[0] == 0)
-    overwrite_empty_fnname (buf, c->last_);
+    gt_overwrite_empty_fnname (buf, c->last_);
   r = VG_ (malloc)("gentrace.record", sizeof (struct Record));
   r->pid_ = tinfo->pid_;
   r->tid_ = tinfo->tid_;
@@ -390,7 +375,7 @@ gt_instrument (VgCallbackClosure *closure, IRSB *sbIn, VexGuestLayout *layout,
           buf[0] = 0;
           VG_ (get_fnname)(cia, buf, 256);
           if (buf[0] == 0)
-            overwrite_empty_fnname (buf, cia);
+            gt_overwrite_empty_fnname (buf, cia);
           // if (VG_ (strstr)(buf, "memory_move_cost") == buf)
           {
             VG_ (printf)("   pass  %s ", buf);
