@@ -1,6 +1,7 @@
 #ifndef GT_THREADINFO_H
 #define GT_THREADINFO_H
 #pragma once
+#include <stdint.h>
 
 struct CTraceStruct
 {
