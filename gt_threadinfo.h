@@ -28,4 +28,11 @@ void gt_thread_info_init (void);
 #define MAX_THREAD_INFO (1000)
 extern struct ThreadInfo s_thread_info[];
 
+struct CTraceStruct *gt_thread_info_pop (struct ThreadInfo *info,
+                                         HWord last_addr);
+
+void gt_thread_info_push (struct ThreadInfo *info, HWord addr);
+
+void gt_flush_thread_info (void (*worker)(struct CTraceStruct *c,
+                                          struct ThreadInfo *tinfo));
 #endif /* GT_THREADINFO_H */

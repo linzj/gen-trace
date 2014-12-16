@@ -56,58 +56,6 @@
 
 static void overwrite_empty_fnname (HChar buf[256], HWord addr);
 
-static struct CTraceStruct *
-thread_info_pop (struct ThreadInfo *info, HWord last_addr)
-{
-  struct CTraceStruct *target;
-  if (info->stack_end_ == 0)
-    return NULL;
-  if (info->stack_end_-- >= s_max_stack)
-    return NULL;
-
-  target = &info->stack_[info->stack_end_];
-
-  target->end_time_ = gt_get_times_from_clock (info);
-  // {
-  //   HWord addr = target->last_;
-  //   HChar buf1[256], buf2[256];
-  //   buf1[0] = 0;
-  //   buf2[0] = 0;
-  //   VG_ (get_fnname)(addr, buf1, 256);
-  //   if (buf1[0] == 0)
-  //     overwrite_empty_fnname (buf1, addr);
-  //   VG_ (get_fnname)(info->last_addr_, buf2, 256);
-  //   if (buf2[0] == 0)
-  //     overwrite_empty_fnname (buf1, last_addr);
-  //   VG_ (printf)("thread_info_pop: pop addr %lx, %s, %d, %lx, %s\n",
-  //   target->last_, buf1, info->stack_end_, last_addr, buf2);
-  // }
-  return target;
-}
-
-static void
-thread_info_push (struct ThreadInfo *info, HWord addr)
-{
-  struct CTraceStruct *target;
-  int index;
-  if (++info->stack_end_ > s_max_stack)
-    return;
-  index = info->stack_end_ - 1;
-  target = &info->stack_[index];
-  target->last_ = addr;
-  target->start_time_ = gt_get_times_from_clock (info);
-
-  // {
-  //   HChar buf[256];
-  //   buf[0] = 0;
-  //   VG_ (get_fnname)(addr, buf, 256);
-  //   if (buf[0] == 0)
-  //     overwrite_empty_fnname (buf, addr);
-  //   VG_ (printf)("thread_info_push: push addr %lx, %s, %d\n", addr, buf,
-  //   info->stack_end_);
-  // }
-}
-
 struct Record
 {
   int pid_;
@@ -224,7 +172,7 @@ handle_call_entry (HWord addr)
     return;
   // VG_ (printf)("handle_call_entry : addr = %lx\n", addr);
 
-  thread_info_push (tinfo, addr);
+  gt_thread_info_push (tinfo, addr);
 }
 
 static void
@@ -236,7 +184,7 @@ handle_ret_entry (HWord addr)
   if (!tinfo)
     return;
   // VG_ (printf)("handle_ret_entry : addr = %lx\n", addr);
-  c = thread_info_pop (tinfo, addr);
+  c = gt_thread_info_pop (tinfo, addr);
   if (!c)
     return;
   ctrace_struct_submit (c, tinfo);
@@ -457,40 +405,12 @@ gt_instrument (VgCallbackClosure *closure, IRSB *sbIn, VexGuestLayout *layout,
 }
 
 static void
-flush_thread_info (void)
-{
-  int i;
-
-  for (i = 0; i < MAX_THREAD_INFO; ++i)
-    {
-      struct ThreadInfo *info = &s_thread_info[i];
-      if (info->tid_ == 0)
-        break;
-      if (info->stack_end_ > 0)
-        {
-          int64_t end_time;
-
-          end_time = gt_get_times_from_clock (info);
-          if (info->stack_end_ > s_max_stack)
-            info->stack_end_ = s_max_stack;
-          while (info->stack_end_ > 0)
-            {
-              struct CTraceStruct *c = &info->stack_[--info->stack_end_];
-              c->end_time_ = end_time;
-              end_time += 10;
-              ctrace_struct_submit (c, info);
-            }
-        }
-    }
-}
-
-static void
 gt_fini (Int exitcode)
 {
   SysRes res;
   char buf[256];
   // flush all thread info
-  flush_thread_info ();
+  gt_flush_thread_info (ctrace_struct_submit);
 
   VG_ (snprintf)(buf, 256, "trace_%d.json", VG_ (getpid)());
   res = VG_ (open)(buf, VKI_O_CREAT | VKI_O_WRONLY, VKI_S_IRUSR | VKI_S_IWUSR);

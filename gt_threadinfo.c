@@ -41,6 +41,34 @@ gt_get_thread_info (void)
   return ret;
 }
 
+struct CTraceStruct *
+gt_thread_info_pop (struct ThreadInfo *info, HWord last_addr)
+{
+  struct CTraceStruct *target;
+  if (info->stack_end_ == 0)
+    return NULL;
+  if (info->stack_end_-- >= s_max_stack)
+    return NULL;
+
+  target = &info->stack_[info->stack_end_];
+
+  target->end_time_ = gt_get_times_from_clock (info);
+  return target;
+}
+
+void
+gt_thread_info_push (struct ThreadInfo *info, HWord addr)
+{
+  struct CTraceStruct *target;
+  int index;
+  if (++info->stack_end_ > s_max_stack)
+    return;
+  index = info->stack_end_ - 1;
+  target = &info->stack_[index];
+  target->last_ = addr;
+  target->start_time_ = gt_get_times_from_clock (info);
+}
+
 static void
 gt_start_client_code_callback (ThreadId tid, ULong blocks_done)
 {
@@ -51,4 +79,33 @@ void
 gt_thread_info_init (void)
 {
   VG_ (track_start_client_code)(&gt_start_client_code_callback);
+}
+
+void
+gt_flush_thread_info (void (*worker)(struct CTraceStruct *c,
+                                     struct ThreadInfo *tinfo))
+{
+  int i;
+
+  for (i = 0; i < MAX_THREAD_INFO; ++i)
+    {
+      struct ThreadInfo *info = &s_thread_info[i];
+      if (info->tid_ == 0)
+        break;
+      if (info->stack_end_ > 0)
+        {
+          int64_t end_time;
+
+          end_time = gt_get_times_from_clock (info);
+          if (info->stack_end_ > s_max_stack)
+            info->stack_end_ = s_max_stack;
+          while (info->stack_end_ > 0)
+            {
+              struct CTraceStruct *c = &info->stack_[--info->stack_end_];
+              c->end_time_ = end_time;
+              end_time += 10;
+              worker (c, info);
+            }
+        }
+    }
 }
