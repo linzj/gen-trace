@@ -68,13 +68,13 @@ gt_find_string (const HChar *str)
 }
 
 void
-gt_init_string (void)
+gt_string_init (void)
 {
   s_string_hash_table = VG_ (HT_construct)("fnname table");
 }
 
 void
-gt_destroy_string (void)
+gt_string_destroy (void)
 {
   VG_ (HT_destruct)(s_string_hash_table, VG_ (free));
 }

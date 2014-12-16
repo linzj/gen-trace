@@ -41,12 +41,13 @@
 #include <time.h>
 #include <alloca.h>
 
-#include "gt_string.h"
 #include "gt_threadinfo.h"
+#include "gt_string.h"
 #include "gt_time.h"
 #include "gt_config.h"
 #include "gt_misc.h"
 #include "gt_record.h"
+#include "gt_thread_stack_control.h"
 
 static void
 handle_call_entry (HWord addr)
@@ -56,7 +57,7 @@ handle_call_entry (HWord addr)
   if (!tinfo)
     return;
 
-  gt_thread_info_push (tinfo, addr);
+  gt_thread_stack_control_push (tinfo, addr);
 }
 
 static void
@@ -67,7 +68,7 @@ handle_ret_entry (HWord addr)
   tinfo = gt_get_thread_info ();
   if (!tinfo)
     return;
-  c = gt_thread_info_pop (tinfo, addr);
+  c = gt_thread_stack_control_pop (tinfo, addr);
   if (!c)
     return;
   gt_ctrace_struct_submit (c, tinfo);
@@ -164,7 +165,8 @@ gt_post_clo_init (void)
       VG_ (clo_vex_control).guest_chase_thresh = 0; // cannot be overriden.
     }
   VG_ (message)(Vg_UserMsg, "max stack = %d\n", s_max_stack);
-  gt_init_string ();
+  gt_string_init ();
+  gt_thread_stack_control_init ();
 }
 
 static void
@@ -289,7 +291,7 @@ gt_fini (Int exitcode)
   // flush all thread info
   gt_flush_thread_info (gt_ctrace_struct_submit);
   gt_final_write ();
-  gt_destroy_string ();
+  gt_string_destroy ();
 }
 
 static Bool
@@ -302,6 +304,9 @@ gt_process_cmd_line_option (const HChar *arg)
     {
     }
   if (VG_BOOL_CLO (arg, "--use-estimated-time", s_use_estimated_time))
+    {
+    }
+  if (VG_STR_CLO (arg, "--only-begin-with", s_only_begin_with))
     {
     }
   return True;
@@ -319,6 +324,8 @@ gt_print_usage (void)
       "\t--max-stack: Used to specify a max stack size. This option\n"
       "\t             effects the size of trace output.\n"
       "\t--use-estimated-time: Use estimated time instead of real time.\n"
+      "\t--only-begin-with: Only print the stacks begins with name matches "
+      "speicify patterns, separated by '|' \n"
       "\t--min-interval: Used to specify a the minium interval. No\n"
       "\t             interval should less than what you specify.\n");
 }
