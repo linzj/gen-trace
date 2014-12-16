@@ -1,8 +1,4 @@
 #include "valgrind.h"
-#include "pub_tool_basics.h"
-#include "pub_tool_libcproc.h"
-#include "pub_tool_mallocfree.h"
-#include "pub_tool_tooliface.h"
 #include "pub_tool_aspacemgr.h"
 #include "pub_tool_libcprint.h"
 #include "gt_misc.h"

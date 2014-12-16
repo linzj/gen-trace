@@ -29,18 +29,14 @@
 */
 
 #include "valgrind.h"
-#include "pub_tool_basics.h"
 #include "pub_tool_tooliface.h"
 #include "pub_tool_libcprint.h"
-#include "pub_tool_libcassert.h"
 #include "pub_tool_debuginfo.h"
 #include "pub_tool_machine.h"
 #include "pub_tool_libcbase.h"
 #include "pub_tool_mallocfree.h"
 #include "pub_tool_libcproc.h"
-#include "pub_tool_threadstate.h"
 #include "pub_tool_options.h"
-#include "pub_tool_aspacemgr.h"
 
 #include <time.h>
 #include <alloca.h>
@@ -59,7 +55,6 @@ handle_call_entry (HWord addr)
   tinfo = gt_get_thread_info ();
   if (!tinfo)
     return;
-  // VG_ (printf)("handle_call_entry : addr = %lx\n", addr);
 
   gt_thread_info_push (tinfo, addr);
 }
@@ -72,7 +67,6 @@ handle_ret_entry (HWord addr)
   tinfo = gt_get_thread_info ();
   if (!tinfo)
     return;
-  // VG_ (printf)("handle_ret_entry : addr = %lx\n", addr);
   c = gt_thread_info_pop (tinfo, addr);
   if (!c)
     return;
@@ -225,10 +219,6 @@ gt_instrument (VgCallbackClosure *closure, IRSB *sbIn, VexGuestLayout *layout,
             cia = st->Ist.IMark.addr;
             if (!has_inject_sb_entry)
               {
-                // VG_ (printf)("instrument: adding guest_sb_entry before instr
-                // "
-                //              "%lx, %0x\n",
-                //              cia, sbIn->jumpkind);
                 if (s_use_estimated_time)
                   {
                     add_host_function_helper_3 (

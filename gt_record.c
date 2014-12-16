@@ -1,12 +1,9 @@
 #include <stdint.h>
 #include <inttypes.h>
 #include "valgrind.h"
-#include "pub_tool_basics.h"
 #include "pub_tool_libcproc.h"
 #include "pub_tool_libcbase.h"
 #include "pub_tool_mallocfree.h"
-#include "pub_tool_tooliface.h"
-#include "pub_tool_aspacemgr.h"
 #include "pub_tool_libcprint.h"
 #include "pub_tool_debuginfo.h"
 #include "pub_tool_xarray.h"
