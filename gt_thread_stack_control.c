@@ -5,9 +5,10 @@
 #include "pub_tool_debuginfo.h"
 #include "gt_thread_stack_control.h"
 #include "gt_threadinfo.h"
+#include "gt_config.h"
 
 static Bool s_always = True;
-static char **s_match_patterns;
+static HChar **s_match_patterns;
 static int s_num_of_match_patterns;
 static Bool s_match_enable = False;
 
@@ -20,7 +21,7 @@ gt_thread_stack_control_push (struct ThreadInfo *info, HWord addr)
     }
   else
     {
-      char buf[256];
+      HChar buf[256];
       buf[0] = '\0';
 
       VG_ (get_fnname)(addr, buf, 256);
@@ -29,7 +30,7 @@ gt_thread_stack_control_push (struct ThreadInfo *info, HWord addr)
           int i;
           for (i = 0; i < s_num_of_match_patterns; ++i)
             {
-              char *str = s_match_patterns[i];
+              HChar *str = s_match_patterns[i];
               if (VG_ (strstr)(buf, str))
                 {
                   // match
@@ -50,7 +51,7 @@ gt_thread_stack_control_pop (struct ThreadInfo *info, HWord last_addr)
     }
   else if (s_match_enable)
     {
-      CTraceStruct *ret;
+      struct CTraceStruct *ret;
 
       ret = gt_thread_info_pop (info, last_addr);
       if (info->stack_end_ == 0)
@@ -63,8 +64,8 @@ gt_thread_stack_control_pop (struct ThreadInfo *info, HWord last_addr)
 void
 gt_thread_stack_control_init (void)
 {
-  const char *str;
-  const char *end;
+  const HChar *str;
+  const HChar *end;
   int count;
   int index;
   if (!s_only_begin_with)
@@ -80,16 +81,17 @@ gt_thread_stack_control_init (void)
       str = end + 1;
       if (*str == '\0')
         break;
-      end = VG_ (strstr)(str, ":");
+      end = VG_ (strstr)(str, "|");
       if (str != end)
         count++;
     }
-  while (end == NULL);
+  while (end != NULL);
   s_num_of_match_patterns = count;
 
   if (count != 0)
     s_always = False;
-  s_match_patterns = VG_ (malloc)(sizeof (char *) * count);
+  s_match_patterns = VG_ (malloc)("thread_stack_control.patterns",
+                                  sizeof (HChar *) * count);
   // fill in s_match_patterns.
 
   end = s_only_begin_with - 1;
@@ -99,7 +101,7 @@ gt_thread_stack_control_init (void)
       str = end + 1;
       if (*str == '\0')
         break;
-      end = VG_ (strstr)(str, ":");
+      end = VG_ (strstr)(str, "|");
       if (str != end)
         {
           int len;
@@ -112,11 +114,12 @@ gt_thread_stack_control_init (void)
               len = end - str;
             }
 
-          char *new_string = (char *)VG_ (malloc)(len + 1);
+          HChar *new_string
+              = (HChar *)VG_ (malloc)("thread_stack_control.strings", len + 1);
           VG_ (memcpy)(new_string, str, len);
           new_string[len] = 0;
           s_match_patterns[index++] = new_string;
         }
     }
-  while (end == NULL);
+  while (end != NULL);
 }

@@ -325,7 +325,7 @@ gt_print_usage (void)
       "\t             effects the size of trace output.\n"
       "\t--use-estimated-time: Use estimated time instead of real time.\n"
       "\t--only-begin-with: Only print the stacks begins with name matches "
-      "speicify pattern.\n"
+      "speicify patterns, separated by '|' \n"
       "\t--min-interval: Used to specify a the minium interval. No\n"
       "\t             interval should less than what you specify.\n");
 }
