@@ -306,6 +306,9 @@ gt_process_cmd_line_option (const HChar *arg)
   if (VG_BOOL_CLO (arg, "--use-estimated-time", s_use_estimated_time))
     {
     }
+  if (VG_STR_CLO (arg, "--only-begin-with", s_only_begin_with))
+    {
+    }
   return True;
 }
 
@@ -321,6 +324,8 @@ gt_print_usage (void)
       "\t--max-stack: Used to specify a max stack size. This option\n"
       "\t             effects the size of trace output.\n"
       "\t--use-estimated-time: Use estimated time instead of real time.\n"
+      "\t--only-begin-with: Only print the stacks begins with name matches "
+      "speicify pattern.\n"
       "\t--min-interval: Used to specify a the minium interval. No\n"
       "\t             interval should less than what you specify.\n");
 }
