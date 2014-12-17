@@ -92,7 +92,7 @@ build_function_decl (const char *name, tree param_type)
 static tree
 make_fname_decl ()
 {
-  const char *name = lang_hooks.decl_printable_name (current_function_decl, 0);
+  const char *name = lang_hooks.decl_printable_name (current_function_decl, 1);
   tree decl, type, init;
   size_t length = strlen (name);
 

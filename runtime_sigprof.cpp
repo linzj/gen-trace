@@ -63,6 +63,9 @@ struct ThreadInfo
   int64_t virtual_time_;
   CTraceStruct *stack_[max_stack];
   int stack_end_;
+#ifdef STR_TO_ENABLE
+  bool enable_;
+#endif
   ThreadInfo ();
   int64_t UpdateVirtualTime (bool fromStart);
   static ThreadInfo *New ();
@@ -112,6 +115,9 @@ ThreadInfo::ThreadInfo ()
   tid_ = syscall (__NR_gettid, 0);
   stack_end_ = 0;
   virtual_time_ = 0;
+#ifdef STR_TO_ENABLE
+  enable_ = false;
+#endif // STR_TO_ENABLE
 }
 
 int64_t
@@ -125,7 +131,7 @@ ThreadInfo::UpdateVirtualTime (bool fromStart)
           if (virtual_time_ >= tmp + frequency)
             return invalid_time;
           // return the original value.
-          return virtual_time_++;
+          return ++virtual_time_;
         }
     }
   else
@@ -293,7 +299,7 @@ DoWriteRecursive (struct Record *current)
     }
   fprintf (file_to_write,
            "{\"cat\":\"%s\", \"pid\":%d, \"tid\":%d, \"ts\":%" PRIu64 ", "
-           "\"ph\":\"X\", \"name\":\"%s\", \"dur\": %" PRIu64 "}",
+           "\"ph\":\"X\", \"name\":\"%.128s\", \"dur\": %" PRIu64 "}",
            "profile", current->pid_, current->tid_, current->start_time_,
            current->name_, current->dur_);
   static int flushCount = 0;
@@ -352,6 +358,17 @@ __start_ctrace__ (void *c, const char *name)
   if (file_to_write == 0)
     return;
   ThreadInfo *tinfo = GetThreadInfo ();
+#ifdef STR_TO_ENABLE
+  if (!tinfo->enable_)
+    {
+      if (strstr (name, STR_TO_ENABLE))
+        {
+          tinfo->enable_ = true;
+        }
+      else
+        return;
+    }
+#endif // STR_TO_ENABLE
   int64_t currentTime = tinfo->UpdateVirtualTime (true);
 
   if (tinfo->stack_end_ < ThreadInfo::max_stack)
@@ -368,6 +385,10 @@ __end_ctrace__ (CTraceStruct *c, const char *name)
   if (file_to_write == 0)
     return;
   ThreadInfo *tinfo = GetThreadInfo ();
+#ifdef STR_TO_ENABLE
+  if (!tinfo->enable_)
+    return;
+#endif // STR_TO_ENABLE
   tinfo->stack_end_--;
   int64_t currentTime = tinfo->UpdateVirtualTime (false);
   if (tinfo->stack_end_ < ThreadInfo::max_stack)
@@ -380,4 +401,8 @@ __end_ctrace__ (CTraceStruct *c, const char *name)
             RecordThis (c, tinfo);
         }
     }
+#ifdef STR_TO_ENABLE
+  if (tinfo->stack_end_ == 0)
+    tinfo->enable_ = false;
+#endif // STR_TO_ENABLE
 }
