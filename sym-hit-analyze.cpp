@@ -9,6 +9,10 @@
 #include <assert.h>
 
 #include <string.h>
+#include <stdio.h>
+
+#include <unistd.h>
+#include <sys/wait.h>
 
 using namespace std;
 static const int BITS_PER_BYTE = 8;
@@ -153,7 +157,69 @@ handle_data_file (ifstream &data_file, ofstream &data_file_out,
     }
 }
 
+static void
+demangle (std::string &s)
+{
+  int fork_ret;
+  int pipes[2];
+  if (-1 == pipe (pipes))
+    {
+      perror ("fails for pipe");
+      return;
+    }
+
+  fork_ret = fork ();
+
+  if (fork_ret == 0)
+    {
+      // child
+      close (pipes[0]);
+      dup2 (pipes[1], 1);
+      close (pipes[1]);
+      execlp ("c++filt", "c++filt", s.c_str (), (char *)NULL);
+      perror ("execvp");
+      __builtin_unreachable ();
+    }
+  else if (fork_ret == -1)
+    {
+      perror ("fork");
+      return;
+    }
+  // parent
+  close (pipes[1]);
+  // s.clear ();
+  do
+    {
+      char *ret_char;
+      char buf[256];
+      char *pbuf;
+      FILE *fp = fdopen (pipes[0], "r");
+      if (!fp)
+        {
+          break;
+        }
+      pbuf = fgets (buf, 256, fp);
+      fclose (fp);
+      ret_char = strrchr (pbuf, '\n');
+      if (ret_char)
+        {
+          *ret_char = '\0';
+        }
+      ret_char = strrchr (pbuf, '\r');
+      if (ret_char)
+        {
+          *ret_char = '\0';
+        }
+      s.assign (pbuf);
+    }
+  while (false);
+  int status;
+  waitpid (fork_ret, &status, 0);
+}
+
 // input like: %x %x %s(no demangle symbol)
+// make by objdump -t obj/local/armeabi/libWebCore_UC.so | awk '{ if ($6 =="")
+// next; print $1,$5,$6;}' >syms
 
 int
 main (int argc, char **argv)
@@ -176,7 +242,7 @@ main (int argc, char **argv)
         cerr << "fails to open sym_file" << endl;
         return 1;
       }
-
+    std::string prefix ("_Z");
     while (true)
       {
         string line;
@@ -192,8 +258,9 @@ main (int argc, char **argv)
         istringstream iss (line);
         iss >> hex >> base;
         iss >> hex >> size;
-        getline (iss, sym);
-
+        iss >> sym;
+        if (!sym.compare (0, prefix.size (), prefix))
+          demangle (sym);
         range_vector.push_back (Range (base, size, sym));
       }
   }
