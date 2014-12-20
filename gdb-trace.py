@@ -111,8 +111,9 @@ g_tinfo = {}
 g_writer = None
 
 def parse_functions_string(functions_string, break_forever):
-    myre = re.compile('[a-zA-Z0-9:_]+\(')
+    myre = re.compile('[a-zA-Z0-9:_<>]+\(')
     myset = {}
+    count = 0
     for function_string in functions_string.splitlines():
         m = myre.search(function_string)
         debug_file.write('%s\n' % function_string)
@@ -126,6 +127,10 @@ def parse_functions_string(functions_string, break_forever):
                 continue
             myset[fun_name_str] = None
             break_forever(fun_name_str)
+            count += 1
+            if count == 100:
+                print("add bp for 100 syms")
+                count = 0
 
 g_ret_bps = {}
 
@@ -225,5 +230,15 @@ def gdb_init():
     g_writer = Writer(open('./trace.json', 'w'))
     functions_string = gdb.execute("info functions", to_string = True)
     parse_functions_string(functions_string, break_forever)
+
+def gdb_end():
+    g_writer.flush()
+    g_writer.close()
+    debug_file.flush()
+    g_writer = None
+    for tid, _mydict in g_ret_bps.items():
+        for bp in _mydict.values():
+            bp.delete()
+    g_ret_bps = {}
 
 gdb_init()
