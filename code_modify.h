@@ -7,8 +7,9 @@ struct mem_modify_instr;
 struct code_context
 {
   void *target_defined;
-  void *code_start;
-  void *code_end;
+  // trampoline code.
+  void *trampoline_code_start;
+  void *trampoline_code_end;
   void *called_callback;
   void *return_callback;
 };
@@ -27,7 +28,7 @@ class target_client
 public:
   virtual ~target_client ();
 
-  virtual void is_code_accept (void *) = 0;
+  virtual bool is_code_accept (void *) = 0;
   virtual code_context *build_code_context (code_manager *, void *target) = 0;
   virtual mem_modify_instr *get_modify_instr (code_context *) = 0;
 };

@@ -15,10 +15,7 @@ code_manager_impl::~code_manager_impl () {}
 code_context *
 code_manager_impl::new_context ()
 {
-  code_context *new_context
-      = static_cast<code_context *> (calloc (1, sizeof (code_context)));
-  if (!new_context)
-    return new_context;
+  code_context *new_context = new code_context;
   contexts_.push_back (new_context);
   return new_context;
 }

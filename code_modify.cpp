@@ -30,7 +30,7 @@ code_modify (void **code_points, int count_of)
   if (v.size () == 0)
     return 0;
   // commit the instr.
-  mem_modify_instr **ppinst = calloc (v.size (), sizeof (mem_modify_instr *));
+  mem_modify_instr **ppinst = new mem_modify_instr *[v.size ()];
   if (!ppinst)
     return false;
   {
@@ -40,8 +40,9 @@ code_modify (void **code_points, int count_of)
         *_ppinst = *i;
       }
   }
-  int count_of_success = mem_modify (ppinst, v.size ());
-  free (ppinst);
+  int count_of_success
+      = mem_modify (const_cast<const mem_modify_instr **> (ppinst), v.size ());
+  delete[] ppinst;
   return count_of_success;
 }
 
