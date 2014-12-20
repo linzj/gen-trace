@@ -34,6 +34,27 @@ template_for_hook:
   popq %rsi
   popq %rdi
   add $8, %rsp
+  # place holder
+  nop
+  nop
+  nop
+  nop
+  nop
+  nop
+  nop
+  nop
+  nop
+  nop
+  nop
+  nop
+  nop
+  nop
+  nop
+  nop
+.globl template_for_hook2
+.hidden template_for_hook2
+.type template_for_hook2, @function
+template_for_hook2:
   movq .Ljump_back(%rip), %r15
   jmpq *%r15
 .Lret_point:
