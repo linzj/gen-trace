@@ -1,14 +1,21 @@
 #include "dis.h"
 #include "dis_client.h"
 #include "log.h"
+#include <string>
+#include <string.h>
+#include <assert.h>
 
 class test_dis_client : public dis_client
 {
+public:
+  std::string s_;
+
 private:
   void
   on_instr (const char *instr)
   {
     LOGI ("%s\n", instr);
+    s_.assign (instr);
   }
 };
 
@@ -581,18 +588,18 @@ const char code[] = "\x41"
                     "\xff"
                     "\xff";
 
-const char *dis[] = {
+const char *dis_str[] = {
   "push   %r14", "push   %r13", "push   %r12", "push   %rbp",
   "mov    %edi,%ebp", "shr    $0x1f,%ebp", "push   %rbx", "add    %edi,%ebp",
-  "sar    %ebp", "sub    $0x20,%rsp", "cmp    $0x1,%ebp", "je     33 ",
+  "sar    %ebp", "sub    $0x20,%rsp", "cmp    $0x1,%ebp", "jz     33 ",
   "mov    %edi,%r13d", "xor    %eax,%eax", "mov    %ebp,%edi",
   "mov    %edx,%r14d", "mov    %rsi,%r12", "callq  2c ", "test   %r13d,%r13d",
   "mov    %eax,%ebx", "jne    40 ", "add    $0x20,%rsp", "pop    %rbx",
   "pop    %rbp", "pop    %r12", "pop    %r13", "pop    %r14", "retq   ",
   "xor    %eax,%eax", "mov    %r12,%rsi", "mov    %r13d,%edi", "callq  4d ",
-  "test   %ebx,%ebx", "jle    33 ", "pxor   %xmm0,%xmm0", "mov    $0x1,%r13d",
+  "test   %ebx,%ebx", "jle    33 ", "'Uor   %xmm0,%xmm0", "mov    $0x1,%r13d",
   "cvtsi2sd %r14d,%xmm0", "xor    %r14d,%r14d", "addsd  %xmm0,%xmm0",
-  "mulsd  0x0(%rip),%xmm0", "movsd  %xmm0,0x18(%rsp)", "pxor   %xmm0,%xmm0",
+  "mulsd  0x0(%rip),%xmm0", "movsd  %xmm0,0x18(%rsp)", "'Uor   %xmm0,%xmm0",
   "movsd  0x18(%rsp),%xmm1", "cvtsi2sd %r13d,%xmm0", "addsd  %xmm0,%xmm0",
   "divsd  %xmm0,%xmm1", "movapd %xmm1,%xmm0", "movsd  %xmm1,0x10(%rsp)",
   "callq  9b ", "movsd  0x10(%rsp),%xmm1", "movsd  %xmm0,0x8(%rsp)",
@@ -608,9 +615,9 @@ const char *dis[] = {
   "movsd  0x8(%rdx),%xmm3", "subsd  %xmm1,%xmm3", "movsd  %xmm3,0x8(%rcx)",
   "add    %rdi,%rcx", "addsd  (%rdx),%xmm2", "addsd  0x8(%rdx),%xmm1",
   "movsd  %xmm2,(%rdx)", "movsd  %xmm1,0x8(%rdx)", "add    %rdi,%rdx",
-  "cmp    %esi,%ebp", "jg     f0 ", "cmp    $0x1,%r13d", "je     227 ",
+  "cmp    %esi,%ebp", "jg     f0 ", "cmp    $0x1,%r13d", "jz     227 ",
   "lea    0x2(%r13,%r13,1),%edx", "lea    (%rax,%rax,1),%r9d",
-  "lea    0x10(%r12),%rdi", "pxor   %xmm4,%xmm4", "mov    $0x1,%esi",
+  "lea    0x10(%r12),%rdi", "'Uor   %xmm4,%xmm4", "mov    $0x1,%esi",
   "movslq %edx,%rdx", "movsd  0x0(%rip),%xmm1", "lea    -0x10(,%rdx,8),%r10",
   "shl    $0x3,%r9", "nopl   0x0(%rax)", "movapd %xmm6,%xmm2",
   "xor    %r8d,%r8d", "movapd %xmm1,%xmm5", "test   %ebp,%ebp",
@@ -628,7 +635,7 @@ const char *dis[] = {
   "movsd  %xmm3,(%rdx)", "movsd  %xmm1,0x8(%rdx)", "add    %r9,%rdx",
   "cmp    %r8d,%ebp", "jg     1b0 ", "add    $0x1,%esi", "add    $0x10,%rdi",
   "cmp    %r13d,%esi", "movapd %xmm5,%xmm1", "jne    170 ",
-  "add    $0x1,%r14d", "cmp    %ebx,%r14d", "je     33 ", "mov    %eax,%r13d",
+  "add    $0x1,%r14d", "cmp    %ebx,%r14d", "jz     33 ", "mov    %eax,%r13d",
   "jmpq   75 ",
 };
 
@@ -639,7 +646,8 @@ main ()
   disasm::Disassembler dis (&c);
   const char *start = code;
   const char *end = start + sizeof (code);
-  for (; start < end;)
+  int i = 0;
+  for (; start < end; ++i)
     {
       int len = dis.InstructionDecode (const_cast<char *> (start));
       start += len;

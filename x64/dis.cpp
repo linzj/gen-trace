@@ -492,8 +492,9 @@ private:
   const char *
   NameOfAddress (byte *addr) const
   {
-    sprintf (tmp_buffer_, "%p", addr);
-    return tmp_buffer_;
+    static char buf[128];
+    sprintf (buf, "%p", addr);
+    return buf;
   }
 
   // Disassembler helper functions.
