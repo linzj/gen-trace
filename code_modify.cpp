@@ -9,20 +9,21 @@ static target_client *g_client;
 static code_manager *g_code_manager;
 
 int
-code_modify (void **code_points, int count_of)
+code_modify (void **code_points, int count_of, void *called_callback,
+             void *return_callback)
 {
   typedef std::vector<mem_modify_instr *> instr_vector;
   instr_vector v;
   for (int i = 0; i < count_of; ++i)
     {
+      code_context *context;
       void *code_point = code_points[i];
-      if (g_client->is_code_accept (code_points))
+      if (g_client->check_code (code_point, g_code_manager, &context))
         {
-          code_context *context
-              = g_client->build_code_context (g_code_manager, code_points);
-          if (context)
+          if (g_client->build_trampoline (g_code_manager, context))
             {
-              mem_modify_instr *instr = g_client->get_modify_instr (context);
+              mem_modify_instr *instr = g_client->modify_code (
+                  context, called_callback, return_callback);
               v.push_back (instr);
             }
         }

@@ -18,7 +18,7 @@ private:
   typedef std::vector<void *> code_vector;
   code_vector codes_;
   // bytes left in the current page.
-  int left_;
+  size_t left_;
   // current page.
   char *current_page_;
 };

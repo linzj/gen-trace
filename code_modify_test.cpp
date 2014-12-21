@@ -10,29 +10,36 @@ public:
 private:
   char to_modify[9];
   virtual bool
-  is_code_accept (void *)
+  check_code (void *target, code_manager *code_manager,
+              code_context **ppcontext)
   {
+    code_context *context;
+    *ppcontext = context = code_manager->new_context ();
+    context->code_point = target;
     return true;
   }
-  virtual code_context *
-  build_code_context (code_manager *m, void *target)
+  virtual bool
+  build_trampoline (code_manager *code_manager, code_context *context)
   {
-    code_context *c = m->new_context ();
+    code_context *c = context;
     assert (c != 0);
-    void *code = m->new_code_mem (9);
+    void *code = code_manager->new_code_mem (9);
     assert (code != 0);
     c->trampoline_code_start = code;
     c->trampoline_code_end = static_cast<char *> (code) + 9;
     return c;
   }
   virtual mem_modify_instr *
-  get_modify_instr (code_context *c)
+  modify_code (code_context *context, void *called_callback,
+               void *return_callback)
   {
     mem_modify_instr *instr = static_cast<mem_modify_instr *> (
         calloc (1, sizeof (mem_modify_instr) + 9));
     assert (instr != NULL);
     instr->where = to_modify;
     instr->size = 9;
+    context->called_callback = called_callback;
+    context->return_callback = return_callback;
     memcpy (instr->data, "123456789", 9);
     return instr;
   }
@@ -56,5 +63,5 @@ main ()
 {
   assert (code_modify_init (init) == true);
   void *code_point = reinterpret_cast<void *> (main);
-  assert (1 == code_modify (&code_point, 1));
+  assert (1 == code_modify (&code_point, 1, (void *)main, (void *)main));
 }
