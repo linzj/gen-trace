@@ -55,4 +55,4 @@ x64_target_client_test: x64/hook_template.o x64/dis.o x64/x64_target_client.o x6
 	g++ $(LDFLAGS) -o $@ $^
 
 clean:
-	rm *.o *.d
+	rm *.o *.d **/*.o **/*.d
