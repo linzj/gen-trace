@@ -1,4 +1,5 @@
 #include <vector>
+#include <stdlib.h>
 #include "code_modify.h"
 #include "code_manager_impl.h"
 #include "mem_modify.h"
@@ -9,16 +10,17 @@ static target_client *g_client;
 static code_manager *g_code_manager;
 
 int
-code_modify (void **code_points, int count_of, void *called_callback,
-             void *return_callback)
+code_modify (const code_modify_desc *code_points, int count_of,
+             void *called_callback, void *return_callback)
 {
   typedef std::vector<mem_modify_instr *> instr_vector;
   instr_vector v;
   for (int i = 0; i < count_of; ++i)
     {
       code_context *context;
-      void *code_point = code_points[i];
-      if (g_client->check_code (code_point, g_code_manager, &context))
+      void *code_point = code_points[i].code_point;
+      const char *name = code_points[i].name;
+      if (g_client->check_code (code_point, name, g_code_manager, &context))
         {
           if (g_client->build_trampoline (g_code_manager, context))
             {
@@ -44,6 +46,12 @@ code_modify (void **code_points, int count_of, void *called_callback,
   int count_of_success
       = mem_modify (const_cast<const mem_modify_instr **> (ppinst), v.size ());
   delete[] ppinst;
+  {
+    for (instr_vector::iterator i = v.begin (); i != v.end (); ++i)
+      {
+        free (*i);
+      }
+  }
   return count_of_success;
 }
 

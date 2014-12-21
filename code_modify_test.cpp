@@ -10,11 +10,11 @@ public:
 private:
   char to_modify[9];
   virtual bool
-  check_code (void *target, code_manager *code_manager,
+  check_code (void *target, const char *name, code_manager *code_manager,
               code_context **ppcontext)
   {
     code_context *context;
-    *ppcontext = context = code_manager->new_context ();
+    *ppcontext = context = code_manager->new_context (name);
     context->code_point = target;
     return true;
   }
@@ -63,5 +63,7 @@ main ()
 {
   assert (code_modify_init (init) == true);
   void *code_point = reinterpret_cast<void *> (main);
-  assert (1 == code_modify (&code_point, 1, (void *)main, (void *)main));
+  const char *name = "main";
+  code_modify_desc desc = { code_point, name };
+  assert (1 == code_modify (&desc, 1, (void *)main, (void *)main));
 }

@@ -13,9 +13,16 @@ code_manager_impl::code_manager_impl () : left_ (0), current_page_ (NULL) {}
 code_manager_impl::~code_manager_impl () {}
 
 code_context *
-code_manager_impl::new_context ()
+code_manager_impl::new_context (const char *function_name)
 {
-  code_context *new_context = new code_context;
+  int function_name_len = strlen (function_name);
+  void *mem = malloc (sizeof (code_context) + function_name_len + 1);
+  memset (mem, 0, sizeof (code_context) + function_name_len + 1);
+  char *deep_copy_str = static_cast<char *> (mem);
+  deep_copy_str += sizeof (code_context);
+  strcpy (deep_copy_str, function_name);
+
+  code_context *new_context = static_cast<code_context *> (mem);
   contexts_.push_back (new_context);
   return new_context;
 }

@@ -8,7 +8,7 @@ int
 main ()
 {
   code_manager_impl *impl = new code_manager_impl ();
-  assert (impl->new_context () != 0);
+  assert (impl->new_context ("test") != 0);
   void *code = impl->new_code_mem (7);
 
   assert (code != NULL);

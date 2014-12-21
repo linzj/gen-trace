@@ -9,7 +9,7 @@ public:
   code_manager_impl ();
   ~code_manager_impl ();
 
-  virtual code_context *new_context ();
+  virtual code_context *new_context (const char *function_name);
   virtual void *new_code_mem (size_t s);
 
 private:
