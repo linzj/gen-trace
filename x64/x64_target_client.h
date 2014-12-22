@@ -9,7 +9,7 @@ public:
   ~x64_target_client ();
 
 private:
-  virtual bool check_code (void *, const char *, code_manager *,
+  virtual bool check_code (void *, const char *, int code_size, code_manager *,
                            code_context **);
   virtual bool build_trampoline (code_manager *, code_context *);
   virtual mem_modify_instr *modify_code (code_context *, void *called_callback,

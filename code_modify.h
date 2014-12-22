@@ -35,7 +35,7 @@ public:
   virtual ~target_client ();
 
   // check if code accept to modify, and turn the context via the 2nd argument.
-  virtual bool check_code (void *, const char *, code_manager *,
+  virtual bool check_code (void *, const char *, int code_size, code_manager *,
                            code_context **) = 0;
   virtual bool build_trampoline (code_manager *, code_context *) = 0;
   virtual mem_modify_instr *modify_code (code_context *, void *called_callback,
@@ -46,6 +46,7 @@ struct code_modify_desc
 {
   void *code_point;
   const char *name;
+  int size;
 };
 
 int code_modify (const code_modify_desc *code_points, int count_of,

@@ -87,12 +87,15 @@ x64_dis_client::on_instr (const char *dis_str)
 
 bool
 x64_target_client::check_code (void *code_point, const char *name,
-                               code_manager *m, code_context **ppcontext)
+                               int code_size, code_manager *m,
+                               code_context **ppcontext)
 {
   x64_dis_client dis_client;
   disasm::Disassembler dis (&dis_client);
   char *start = static_cast<char *> (code_point);
   int current = 0;
+  if (code_size < byte_needed_to_modify)
+    return false;
   while (current < byte_needed_to_modify && dis_client.is_accept ())
     {
       int len = dis.InstructionDecode (start);

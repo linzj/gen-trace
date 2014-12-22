@@ -1,10 +1,12 @@
 .PHONY: all test
 all:
-test: code_manager_impl_test mem_modify_test \
+TESTS := code_manager_impl_test mem_modify_test \
 	code_modify_test \
 	dis_x64_test \
 	hook_template_test \
 	x64_target_client_test
+
+test: $(TESTS)
 
 OBJS := log.o \
 		mem_modify.o \
@@ -56,3 +58,5 @@ x64_target_client_test: x64/hook_template.o x64/dis.o x64/x64_target_client.o x6
 
 clean:
 	rm *.o *.d **/*.o **/*.d
+test_all: $(TESTS)
+	$(foreach test, $^, $(info./$(test)))

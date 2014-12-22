@@ -10,8 +10,8 @@ public:
 private:
   char to_modify[9];
   virtual bool
-  check_code (void *target, const char *name, code_manager *code_manager,
-              code_context **ppcontext)
+  check_code (void *target, const char *name, int code_size,
+              code_manager *code_manager, code_context **ppcontext)
   {
     code_context *context;
     *ppcontext = context = code_manager->new_context (name);

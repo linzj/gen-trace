@@ -20,7 +20,9 @@ code_modify (const code_modify_desc *code_points, int count_of,
       code_context *context;
       void *code_point = code_points[i].code_point;
       const char *name = code_points[i].name;
-      if (g_client->check_code (code_point, name, g_code_manager, &context))
+      int size = code_points[i].size;
+      if (g_client->check_code (code_point, name, size, g_code_manager,
+                                &context))
         {
           if (g_client->build_trampoline (g_code_manager, context))
             {

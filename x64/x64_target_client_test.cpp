@@ -26,7 +26,8 @@ main ()
   x64_target_client x64_target_client;
   target_client *target_client = &x64_target_client;
   code_context *cc;
-  assert (target_client->check_code (data, "test", &code_manager, &cc));
+  assert (target_client->check_code (data, "test", sizeof (data),
+                                     &code_manager, &cc));
   assert (cc->code_point == &data[0]);
   assert (target_client->build_trampoline (&code_manager, cc));
   assert (cc->trampoline_code_start != 0);
