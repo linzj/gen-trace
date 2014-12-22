@@ -1,5 +1,6 @@
 #include <vector>
 #include <stdlib.h>
+#include <stdio.h>
 #include <assert.h>
 #include "code_modify.h"
 #include "code_manager_impl.h"
@@ -9,6 +10,7 @@ target_client::~target_client () {}
 
 static target_client *g_client;
 static code_manager *g_code_manager;
+static const char *g_log_for_fail;
 
 int
 code_modify (const code_modify_desc *code_points, int count_of,
@@ -18,6 +20,12 @@ code_modify (const code_modify_desc *code_points, int count_of,
   assert (g_code_manager);
   typedef std::vector<mem_modify_instr *> instr_vector;
   instr_vector v;
+  FILE *fp_for_fail = NULL;
+
+  if (g_log_for_fail)
+    {
+      fp_for_fail = fopen (g_log_for_fail, "w");
+    }
   for (int i = 0; i < count_of; ++i)
     {
       code_context *context;
@@ -33,7 +41,21 @@ code_modify (const code_modify_desc *code_points, int count_of,
                   context, called_callback, return_callback);
               v.push_back (instr);
             }
+          else if (fp_for_fail)
+            {
+              fprintf (fp_for_fail, "build trampoline: %p, %s\n", code_point,
+                       name);
+            }
         }
+      else
+        {
+          if (fp_for_fail)
+            fprintf (fp_for_fail, "check code: %p, %s\n", code_point, name);
+        }
+    }
+  if (fp_for_fail)
+    {
+      fclose (fp_for_fail);
     }
   if (v.size () == 0)
     return 0;
@@ -66,4 +88,12 @@ code_modify_init (target_client *client)
   g_client = client;
   g_code_manager = new code_manager_impl ();
   return g_client != NULL && g_code_manager != NULL;
+}
+
+void
+code_modify_set_log_for_fail (const char *log_for_fail_name)
+{
+  if (log_for_fail_name && log_for_fail_name[0] == '\0')
+    return;
+  g_log_for_fail = log_for_fail_name;
 }

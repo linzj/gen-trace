@@ -52,4 +52,6 @@ struct code_modify_desc
 int code_modify (const code_modify_desc *code_points, int count_of,
                  void *called_callback, void *return_callback);
 bool code_modify_init (target_client *);
+// set the file name for fail logging;
+void code_modify_set_log_for_fail (const char *log_for_fail_name);
 #endif /* CODE_MODIFY_H */

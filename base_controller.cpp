@@ -128,6 +128,7 @@ base_controller::do_modify (config_desc *config_desc)
   target_client *_target_client = new x64_target_client;
 #endif
   code_modify_init (_target_client);
+  code_modify_set_log_for_fail (config_desc->where_to_keep_log);
   int code_modified_count
       = code_modify (config_desc->desc_array, config_desc->desc_array_size,
                      called_callback_, return_callback_);
