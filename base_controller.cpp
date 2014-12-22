@@ -43,7 +43,7 @@ base_controller::do_it ()
       return;
     }
   do_rest_with_config (config_desc);
-  free (fp_client);
+  free (config_desc);
 }
 
 void
