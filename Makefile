@@ -4,7 +4,8 @@ TESTS := code_manager_impl_test mem_modify_test \
 	code_modify_test \
 	dis_x64_test \
 	hook_template_test \
-	x64_target_client_test
+	x64_target_client_test \
+	config_reader_test
 
 test: $(TESTS)
 
@@ -12,10 +13,12 @@ OBJS := log.o \
 		mem_modify.o \
 		code_manager_impl.o \
 		code_modify.o \
+		config_reader.o \
 		\
 		mem_modify_test.o \
 		code_modify_test.o \
 		code_manager_impl_test.o \
+		config_reader_test.o \
 		\
 		x64/dis.o \
 		x64/hook_template.o \
@@ -55,7 +58,9 @@ hook_template_test: x64/hook_template_test.o x64/hook_template.o log.o
 	g++ $(LDFLAGS) -o $@ $^
 x64_target_client_test: x64/hook_template.o x64/dis.o x64/x64_target_client.o x64/x64_target_client_test.o code_manager_impl.o log.o code_modify.o mem_modify.o
 	g++ $(LDFLAGS) -o $@ $^
-
+config_reader_test: config_reader.o config_reader_test.o log.o
+	g++ $(LDFLAGS) -o $@ $^
+	
 clean:
 	rm *.o *.d **/*.o **/*.d
 test_all: $(TESTS)
