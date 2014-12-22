@@ -1,6 +1,7 @@
 #include "x64_target_client.h"
 #include "code_manager_impl.h"
 #include <assert.h>
+#include <stdlib.h>
 
 char data[] = "\x53"
               "\x31"
@@ -34,4 +35,5 @@ main ()
   mem_modify_instr *instr
       = target_client->modify_code (cc, (void *)main, (void *)main);
   assert (instr);
+  free (instr);
 }

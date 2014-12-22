@@ -52,16 +52,11 @@ public:
   }
 };
 
-static target_client *
-init (void)
-{
-  return new test_target_client ();
-}
-
 int
 main ()
 {
-  assert (code_modify_init (init) == true);
+  target_client *_test_target_client = new test_target_client ();
+  assert (code_modify_init (_test_target_client) == true);
   void *code_point = reinterpret_cast<void *> (main);
   const char *name = "main";
   code_modify_desc desc = { code_point, name };

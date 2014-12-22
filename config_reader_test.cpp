@@ -1,7 +1,8 @@
 #include "config_reader.h"
 #include <assert.h>
+#include <stdlib.h>
 
-const char *test_lines[] = {
+static const char *test_lines[] = {
   "cc1\n", "\n", "00000000005d5030\n", "00000000000000b2\n",
   "find_attribute_namespace(char const*)\n", "00000000005644f0\n",
   "0000000000000015\n",
@@ -36,4 +37,5 @@ main ()
     }
   config_desc *desc = r.accumulate ();
   assert (desc);
+  free (desc);
 }

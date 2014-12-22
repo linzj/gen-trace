@@ -3,11 +3,12 @@
 #include <sys/mman.h>
 #include <sys/user.h>
 #include <stdint.h>
+#include <memory>
 
 int
 main ()
 {
-  code_manager_impl *impl = new code_manager_impl ();
+  std::auto_ptr<code_manager_impl> impl (new code_manager_impl ());
   assert (impl->new_context ("test") != 0);
   void *code = impl->new_code_mem (NULL, 7);
 

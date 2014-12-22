@@ -51,5 +51,5 @@ struct code_modify_desc
 
 int code_modify (const code_modify_desc *code_points, int count_of,
                  void *called_callback, void *return_callback);
-bool code_modify_init (target_client *(*)(void));
+bool code_modify_init (target_client *);
 #endif /* CODE_MODIFY_H */

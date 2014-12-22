@@ -1,5 +1,6 @@
 #include <vector>
 #include <stdlib.h>
+#include <assert.h>
 #include "code_modify.h"
 #include "code_manager_impl.h"
 #include "mem_modify.h"
@@ -13,6 +14,8 @@ int
 code_modify (const code_modify_desc *code_points, int count_of,
              void *called_callback, void *return_callback)
 {
+  assert (g_client);
+  assert (g_code_manager);
   typedef std::vector<mem_modify_instr *> instr_vector;
   instr_vector v;
   for (int i = 0; i < count_of; ++i)
@@ -58,9 +61,9 @@ code_modify (const code_modify_desc *code_points, int count_of,
 }
 
 bool
-code_modify_init (target_client *(*func)(void))
+code_modify_init (target_client *client)
 {
-  g_client = func ();
+  g_client = client;
   g_code_manager = new code_manager_impl ();
   return g_client != NULL && g_code_manager != NULL;
 }

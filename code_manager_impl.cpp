@@ -11,7 +11,14 @@
 code_manager::~code_manager () {}
 
 code_manager_impl::code_manager_impl () : left_ (0), current_page_ (NULL) {}
-code_manager_impl::~code_manager_impl () {}
+code_manager_impl::~code_manager_impl ()
+{
+  for (context_vector::iterator i = contexts_.begin (); i != contexts_.end ();
+       ++i)
+    {
+      free (*i);
+    }
+}
 
 code_context *
 code_manager_impl::new_context (const char *function_name)
