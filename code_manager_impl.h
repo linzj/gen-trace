@@ -10,9 +10,10 @@ public:
   ~code_manager_impl ();
 
   virtual code_context *new_context (const char *function_name);
-  virtual void *new_code_mem (size_t s);
+  virtual void *new_code_mem (void *hint, size_t s);
 
 private:
+  void *new_code_mem_no_hint (size_t s);
   typedef std::vector<code_context *> context_vector;
   context_vector contexts_;
   typedef std::vector<void *> code_vector;

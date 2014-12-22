@@ -133,7 +133,7 @@ x64_target_client::build_trampoline (code_manager *m, code_context *context)
   static const int copy_size = (char *)template_for_hook_end
                                - (char *)template_for_hook;
   static const int trampoline_size = copy_size + 8 * 4;
-  void *code_mem = m->new_code_mem (trampoline_size);
+  void *code_mem = m->new_code_mem (context->code_point, trampoline_size);
   if (!code_mem)
     {
       return false;
@@ -186,10 +186,10 @@ x64_target_client::modify_code (code_context *context, void *called_callback,
   // At here the code mem has been modified completely.
   int code_len = reinterpret_cast<intptr_t> (context->machine_defined);
   mem_modify_instr *instr = static_cast<mem_modify_instr *> (
-      malloc (sizeof (mem_modify_instr) + code_len));
+      malloc (sizeof (mem_modify_instr) + code_len - 1));
   instr->where = context->code_point;
   instr->size = code_len;
-  char *modify_intr_pointer = reinterpret_cast<char *> (instr + 1);
+  char *modify_intr_pointer = reinterpret_cast<char *> (&instr->data[0]);
   memset (modify_intr_pointer, code_len, 0x90);
   modify_intr_pointer[0] = 0xff;
   modify_intr_pointer[1] = 0x25;

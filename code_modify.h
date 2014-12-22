@@ -25,7 +25,7 @@ public:
   virtual ~code_manager ();
 
   virtual code_context *new_context (const char *function_name) = 0;
-  virtual void *new_code_mem (size_t s) = 0;
+  virtual void *new_code_mem (void *hint, size_t s) = 0;
   // FIXME: need a delete code mem function.
 };
 

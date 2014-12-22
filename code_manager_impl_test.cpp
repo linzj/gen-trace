@@ -9,7 +9,7 @@ main ()
 {
   code_manager_impl *impl = new code_manager_impl ();
   assert (impl->new_context ("test") != 0);
-  void *code = impl->new_code_mem (7);
+  void *code = impl->new_code_mem (NULL, 7);
 
   assert (code != NULL);
   intptr_t code_i = reinterpret_cast<intptr_t> (code);
@@ -17,11 +17,11 @@ main ()
   const static intptr_t my_page_mask = ~(PAGE_SIZE - 1L);
   for (int i = 0; i < count_to_new_page; ++i)
     {
-      void *code2 = impl->new_code_mem (7);
+      void *code2 = impl->new_code_mem (NULL, 7);
       intptr_t code2_i = reinterpret_cast<intptr_t> (code2);
       assert ((code2_i & my_page_mask) == code_i);
     }
-  void *code2 = impl->new_code_mem (7);
+  void *code2 = impl->new_code_mem (NULL, 7);
   intptr_t code2_i = reinterpret_cast<intptr_t> (code2);
   assert ((code2_i & my_page_mask) != code_i);
 }

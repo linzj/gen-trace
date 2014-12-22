@@ -23,7 +23,7 @@ private:
   {
     code_context *c = context;
     assert (c != 0);
-    void *code = code_manager->new_code_mem (9);
+    void *code = code_manager->new_code_mem (NULL, 9);
     assert (code != 0);
     c->trampoline_code_start = code;
     c->trampoline_code_end = static_cast<char *> (code) + 9;
