@@ -8,7 +8,7 @@
 #include "mem_modify.h"
 
 // jmp *xxxx;
-const static int byte_needed_to_modify = 6;
+const static int byte_needed_to_modify = 5;
 const static int max_tempoline_insert_space = 16;
 const static int max_positive_jump = 0x7fffffff;
 const static int max_negative_jump = 0x80000000;
@@ -16,10 +16,9 @@ const static int nop = 0x90;
 // 0000000000000000 <foo()>:
 //    0:	55                   	push   %rbp
 //    1:	48 89 e5             	mov    %rsp,%rbp
-//    4:	ff 25 a0 aa aa 0a    	jmpq   *0xaaaaaa0(%rip)        #
-//    aaaaaaa
-//    a:	5d                   	pop    %rbp
-//    b:	c3                   	retq
+//    4:	e9 00 00 00 00       	jmpq   9 <foo()+0x9>
+//    9:	5d                   	pop    %rbp
+//    a:	c3                   	retq
 
 x64_target_client::x64_target_client () {}
 x64_target_client::~x64_target_client () {}
@@ -191,13 +190,12 @@ x64_target_client::modify_code (code_context *context, void *called_callback,
   instr->size = code_len;
   char *modify_intr_pointer = reinterpret_cast<char *> (&instr->data[0]);
   memset (modify_intr_pointer, 0x90, code_len);
-  modify_intr_pointer[0] = 0xff;
-  modify_intr_pointer[1] = 0x25;
+  modify_intr_pointer[0] = 0xe9;
   intptr_t jump_dist
       = reinterpret_cast<intptr_t> (context->trampoline_code_start)
         - reinterpret_cast<intptr_t> (target_code_point
                                       + byte_needed_to_modify);
   int jump_dist_int = static_cast<int> (jump_dist);
-  memcpy (&modify_intr_pointer[2], &jump_dist_int, sizeof (int));
+  memcpy (&modify_intr_pointer[1], &jump_dist_int, sizeof (int));
   return instr;
 }

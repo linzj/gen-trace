@@ -31,6 +31,7 @@ code_manager_impl::new_context (const char *function_name)
   strcpy (deep_copy_str, function_name);
 
   code_context *new_context = static_cast<code_context *> (mem);
+  new_context->function_name = deep_copy_str;
   contexts_.push_back (new_context);
   return new_context;
 }

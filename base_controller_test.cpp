@@ -1,9 +1,13 @@
 #include <stddef.h>
+#include <string.h>
+#include <assert.h>
+#include <unistd.h>
 #include "base_controller.h"
+#include "log.h"
 
 static const char *test_lines[] = {
-  "base_controller_test\n", "\n", "000000000000fbac\n", "000000000000008b\n",
-  "main\n",
+  "libbase_controller_test_lib.so\n", "\n", "00000000000007e0\n",
+  "000000000000015d\n", "original_function\n",
 };
 
 class test_fp_line_client : public fp_line_client
@@ -43,10 +47,34 @@ private:
   }
 };
 
+static void *g_original_ret;
+
+static void
+hook (void *original_ret, const char **name)
+{
+  g_original_ret = original_ret;
+  LOGI ("hook called\n");
+}
+
+static void *
+ret_hook (void)
+{
+  assert (g_original_ret != NULL);
+  LOGI ("ret_hook called\n");
+  return g_original_ret;
+}
+
+extern "C" {
+const char *original_function (int a, int b, int c, int d, int e, int f,
+                               int g);
+}
+
 int
 main ()
 {
-  test_base_controller controller ((void *)main, (void *)main);
+  test_base_controller controller ((void *)hook, (void *)ret_hook);
   controller.do_it ();
+  const char *ret = original_function (0, 1, 2, 3, 4, 5, 6);
+  assert (strcmp (ret, "nimabi") == 0);
   return 0;
 }

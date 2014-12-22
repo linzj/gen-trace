@@ -22,6 +22,7 @@ OBJS := log.o \
 		code_manager_impl_test.o \
 		config_reader_test.o \
 		base_controller_test.o \
+		base_controller_test_lib.o \
 		\
 		x64/dis.o \
 		x64/hook_template.o \
@@ -31,7 +32,7 @@ OBJS := log.o \
 		x64/hook_template_test.o \
 		x64/x64_target_client_test.o
 
-CFLAGS := -O0 -g -Wall -I. -fPIC
+CFLAGS := -O0 -g -Wall -I. -fPIC -fvisibility=hidden
 
 LDFLAGS := -pie
 
@@ -64,8 +65,11 @@ x64_target_client_test: x64/hook_template.o x64/dis.o x64/x64_target_client.o x6
 config_reader_test: config_reader.o config_reader_test.o log.o
 	g++ $(LDFLAGS) -o $@ $^
 
-base_controller_test: config_reader.o  base_controller.o code_manager_impl.o log.o code_modify.o mem_modify.o x64/hook_template.o x64/dis.o x64/x64_target_client.o base_controller_test.o
-	g++ $(LDFLAGS) -o $@ $^
+libbase_controller_test_lib.so: base_controller_test_lib.o log.o
+	g++ -shared -o $@ $^
+
+base_controller_test: config_reader.o  base_controller.o code_manager_impl.o log.o code_modify.o mem_modify.o x64/hook_template.o x64/dis.o x64/x64_target_client.o base_controller_test.o libbase_controller_test_lib.so
+	g++ $(LDFLAGS) -Wl,-rpath,. -o $@ $(filter %.o, $^) -L. -lbase_controller_test_lib
 
 clean:
 	rm *.o *.d **/*.o **/*.d
