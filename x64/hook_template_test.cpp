@@ -16,10 +16,10 @@ extern void template_for_hook_end (void);
 static void *g_original_ret;
 
 static void
-hook (void *original_ret, const char **name)
+hook (void *original_ret, const char *name)
 {
   g_original_ret = original_ret;
-  LOGI ("hook called\n");
+  LOGI ("hook called %s\n", name);
 }
 
 static void *

@@ -14,7 +14,8 @@ static const char *g_log_for_fail;
 
 int
 code_modify (const code_modify_desc *code_points, int count_of,
-             void *called_callback, void *return_callback)
+             pfn_called_callback called_callback,
+             pfn_ret_callback return_callback)
 {
   assert (g_client);
   assert (g_code_manager);

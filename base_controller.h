@@ -13,7 +13,8 @@ public:
 class base_controller
 {
 public:
-  base_controller (void *called_callback, void *return_callback);
+  base_controller (pfn_called_callback called_callback,
+                   pfn_ret_callback return_callback);
   virtual ~base_controller ();
 
   virtual fp_line_client *open_line_client () = 0;
@@ -28,7 +29,7 @@ private:
   void do_modify (config_desc *);
   bool is_base_elf (intptr_t base);
 
-  void *called_callback_;
-  void *return_callback_;
+  pfn_called_callback called_callback_;
+  pfn_ret_callback return_callback_;
 };
 #endif /* BASE_CONTROLLER_H */

@@ -2,6 +2,7 @@
 #include <string.h>
 #include <assert.h>
 #include <unistd.h>
+#include "code_modify.h"
 #include "base_controller.h"
 #include "log.h"
 
@@ -29,7 +30,8 @@ private:
 class test_base_controller : public base_controller
 {
 public:
-  test_base_controller (void *called_callback, void *return_callback)
+  test_base_controller (pfn_called_callback called_callback,
+                        pfn_ret_callback return_callback)
       : base_controller (called_callback, return_callback)
   {
   }
@@ -50,10 +52,11 @@ private:
 static void *g_original_ret;
 
 static void
-hook (void *original_ret, const char **name)
+hook (void *original_ret, const char *name)
 {
   g_original_ret = original_ret;
-  LOGI ("hook called\n");
+
+  LOGI ("hook called, %s\n", name);
 }
 
 static void *
@@ -72,7 +75,7 @@ const char *original_function (int a, int b, int c, int d, int e, int f,
 int
 main ()
 {
-  test_base_controller controller ((void *)hook, (void *)ret_hook);
+  test_base_controller controller (hook, ret_hook);
   controller.do_it ();
   const char *ret = original_function (0, 1, 2, 3, 4, 5, 6);
   assert (strcmp (ret, "nimabi") == 0);

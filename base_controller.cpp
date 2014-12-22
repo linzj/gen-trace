@@ -1,7 +1,7 @@
+#include "code_modify.h"
 #include "base_controller.h"
 #include "config_reader.h"
 #include "log.h"
-#include "code_modify.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdint.h>
@@ -22,7 +22,8 @@ typedef struct
 } compare_struct;
 
 fp_line_client::~fp_line_client () {}
-base_controller::base_controller (void *called_callback, void *return_callback)
+base_controller::base_controller (pfn_called_callback called_callback,
+                                  pfn_ret_callback return_callback)
     : called_callback_ (called_callback), return_callback_ (return_callback)
 {
 }

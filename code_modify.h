@@ -3,6 +3,8 @@
 #pragma once
 #include <stddef.h>
 struct mem_modify_instr;
+typedef void (*pfn_called_callback)(void *original_ret, const char *name);
+typedef void *(*pfn_ret_callback)(void);
 
 struct code_context
 {
@@ -15,8 +17,8 @@ struct code_context
   // trampoline code.
   void *trampoline_code_start;
   void *trampoline_code_end;
-  void *called_callback;
-  void *return_callback;
+  pfn_called_callback called_callback;
+  pfn_ret_callback return_callback;
 };
 
 class code_manager
@@ -38,8 +40,9 @@ public:
   virtual bool check_code (void *, const char *, int code_size, code_manager *,
                            code_context **) = 0;
   virtual bool build_trampoline (code_manager *, code_context *) = 0;
-  virtual mem_modify_instr *modify_code (code_context *, void *called_callback,
-                                         void *return_callback) = 0;
+  virtual mem_modify_instr *modify_code (code_context *,
+                                         pfn_called_callback called_callback,
+                                         pfn_ret_callback return_callback) = 0;
 };
 
 struct code_modify_desc
@@ -50,7 +53,8 @@ struct code_modify_desc
 };
 
 int code_modify (const code_modify_desc *code_points, int count_of,
-                 void *called_callback, void *return_callback);
+                 pfn_called_callback called_callback,
+                 pfn_ret_callback return_callback);
 bool code_modify_init (target_client *);
 // set the file name for fail logging;
 void code_modify_set_log_for_fail (const char *log_for_fail_name);

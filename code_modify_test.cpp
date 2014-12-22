@@ -30,8 +30,8 @@ private:
     return c;
   }
   virtual mem_modify_instr *
-  modify_code (code_context *context, void *called_callback,
-               void *return_callback)
+  modify_code (code_context *context, pfn_called_callback called_callback,
+               pfn_ret_callback return_callback)
   {
     mem_modify_instr *instr = static_cast<mem_modify_instr *> (
         calloc (1, sizeof (mem_modify_instr) + 9));
@@ -60,5 +60,6 @@ main ()
   void *code_point = reinterpret_cast<void *> (main);
   const char *name = "main";
   code_modify_desc desc = { code_point, name };
-  assert (1 == code_modify (&desc, 1, (void *)main, (void *)main));
+  assert (1 == code_modify (&desc, 1, (pfn_called_callback)main,
+                            (pfn_ret_callback)main));
 }
