@@ -190,7 +190,7 @@ x64_target_client::modify_code (code_context *context, void *called_callback,
   instr->where = context->code_point;
   instr->size = code_len;
   char *modify_intr_pointer = reinterpret_cast<char *> (&instr->data[0]);
-  memset (modify_intr_pointer, code_len, 0x90);
+  memset (modify_intr_pointer, 0x90, code_len);
   modify_intr_pointer[0] = 0xff;
   modify_intr_pointer[1] = 0x25;
   intptr_t jump_dist

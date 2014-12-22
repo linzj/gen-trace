@@ -645,7 +645,7 @@ main ()
   test_dis_client c;
   disasm::Disassembler dis (&c);
   const char *start = code;
-  const char *end = start + sizeof (code);
+  const char *end = start + sizeof (code) - 1;
   int i = 0;
   for (; start < end; ++i)
     {
