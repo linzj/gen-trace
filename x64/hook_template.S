@@ -69,8 +69,7 @@ template_for_hook2:
   pushq %rdx
   pushq %rdi
   pushq %rsi
-  movq .Lret_jump(%rip), %rax
-  callq *%rax
+  callq *.Lret_jump(%rip)
   movq %rax, %rcx # real return point goes to rax
   popq %rsi
   popq %rdi
