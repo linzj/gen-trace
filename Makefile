@@ -1,5 +1,5 @@
 .PHONY: all test
-all:
+all:libtrace.so
 TESTS := code_manager_impl_test mem_modify_test \
 	code_modify_test \
 	dis_x64_test \
@@ -9,28 +9,41 @@ TESTS := code_manager_impl_test mem_modify_test \
 	base_controller_test \
 
 test: $(TESTS)
-
-OBJS := log.o \
+MAIN_OBJS := log.o \
 		mem_modify.o \
 		code_manager_impl.o \
 		code_modify.o \
 		config_reader.o \
-		base_controller.o \
+		base_controller.o
+
+MAIN_TEST_OBJS :=  \
+				  mem_modify_test.o \
+				  code_modify_test.o \
+				  code_manager_impl_test.o \
+				  config_reader_test.o \
+				  base_controller_test.o \
+				  base_controller_test_lib.o \
+				  runtime_stack.o \
+				  entry.o
+
+X64_MAIN_OBJS := \
+				  x64/dis.o \
+				  x64/hook_template.o \
+				  x64/x64_target_client.o \
+
+X64_TEST_OBJS := \
+				  x64/dis_test.o \
+				  x64/hook_template_test.o \
+				  x64/x64_target_client_test.o
+
+
+OBJS := $(MAIN_OBJS) \
 		\
-		mem_modify_test.o \
-		code_modify_test.o \
-		code_manager_impl_test.o \
-		config_reader_test.o \
-		base_controller_test.o \
-		base_controller_test_lib.o \
+		$(MAIN_TEST_OBJS) \
 		\
-		x64/dis.o \
-		x64/hook_template.o \
-		x64/x64_target_client.o \
+		$(X64_MAIN_OBJS) \
 		\
-		x64/dis_test.o \
-		x64/hook_template_test.o \
-		x64/x64_target_client_test.o
+		$(X64_TEST_OBJS)
 
 CFLAGS := -O0 -g -Wall -I. -fPIC -fvisibility=hidden
 
@@ -75,3 +88,6 @@ clean:
 	rm *.o *.d **/*.o **/*.d
 test_all: $(TESTS)
 	$(foreach test, $^, $(info ./$(test)))
+
+libtrace.so: $(MAIN_OBJS)
+	g++ $(LDFLAGS) -shared -o $@ $^
