@@ -7,7 +7,7 @@
 #include "log.h"
 
 static const char *test_lines[] = {
-  "libbase_controller_test_lib.so\n", "\n", "00000000000007e0\n",
+  "libbase_controller_test_lib.so\n", "here\n", "00000000000007e0\n",
   "000000000000015d\n", "original_function\n",
 };
 

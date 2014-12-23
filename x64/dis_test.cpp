@@ -17,6 +17,7 @@ private:
     LOGI ("%s\n", instr);
     s_.assign (instr);
   }
+  void on_addr (intptr_t) {}
 };
 
 const char code[] = "\x41"

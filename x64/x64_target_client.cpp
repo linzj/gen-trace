@@ -36,6 +36,7 @@ public:
 
 private:
   virtual void on_instr (const char *);
+  virtual void on_addr (intptr_t);
   bool is_accept_;
 };
 
@@ -91,6 +92,60 @@ x64_dis_client::on_instr (const char *dis_str)
     }
 }
 
+void x64_dis_client::on_addr (intptr_t) {}
+
+class x64_test_back_egde_client : public dis_client
+{
+public:
+  x64_test_back_egde_client (intptr_t base, intptr_t hook_end);
+
+  bool
+  is_accept () const
+  {
+    return is_accept_;
+  }
+
+private:
+  virtual void on_instr (const char *);
+  virtual void on_addr (intptr_t);
+  bool is_accept_;
+  intptr_t base_;
+  intptr_t hook_end_;
+};
+
+x64_test_back_egde_client::x64_test_back_egde_client (intptr_t base,
+                                                      intptr_t hook_end)
+    : is_accept_ (true), base_ (base), hook_end_ (hook_end)
+{
+}
+
+void
+x64_test_back_egde_client::on_instr (const char *)
+{
+}
+void
+x64_test_back_egde_client::on_addr (intptr_t ref)
+{
+  if (ref < hook_end_ && ref >= base_)
+    {
+      is_accept_ = false;
+    }
+}
+
+static bool
+check_for_back_edge (char *start, char *hook_end, char *code_end)
+{
+  x64_test_back_egde_client dis_client (reinterpret_cast<intptr_t> (start),
+                                        reinterpret_cast<intptr_t> (hook_end));
+  disasm::Disassembler dis (&dis_client);
+  for (char *i = hook_end; i < code_end && dis_client.is_accept ();)
+    {
+      int len = dis.InstructionDecode (i);
+      i += len;
+    }
+  return dis_client.is_accept ();
+}
+
 bool
 x64_target_client::check_code (void *code_point, const char *name,
                                int code_size, code_manager *m,
@@ -113,6 +168,11 @@ x64_target_client::check_code (void *code_point, const char *name,
       return false;
     }
   if (current > max_tempoline_insert_space)
+    {
+      return false;
+    }
+  if (!check_for_back_edge (static_cast<char *> (code_point), start,
+                            static_cast<char *> (code_point) + code_size))
     {
       return false;
     }

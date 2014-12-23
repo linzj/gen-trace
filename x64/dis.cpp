@@ -36,18 +36,8 @@ Disassembler::DisassemblerImpl::_fprintf_ (void *stream, const char *fmt, ...)
   int num_of_chars = vsnprintf (
       impl->pos_, static_cast<size_t> (impl->end_ - impl->pos_), fmt, args);
   va_end (args);
-  if (impl->pos_[num_of_chars - 1] == '\n')
-    {
-      impl->pos_[num_of_chars - 1] = '\0';
-      impl->flush ();
-    }
   impl->pos_ += num_of_chars;
   assert (impl->pos_ <= impl->end_);
-  if (impl->pos_ == impl->end_)
-    {
-      impl->end_[-1] = '\0';
-      impl->flush ();
-    }
   return num_of_chars;
 }
 
@@ -76,6 +66,8 @@ void
 Disassembler::DisassemblerImpl::print_address (bfd_vma addr,
                                                struct disassemble_info *dinfo)
 {
+  DisassemblerImpl *impl = static_cast<DisassemblerImpl *> (dinfo->stream);
+  impl->client_->on_addr (addr);
 }
 
 Disassembler::DisassemblerImpl::DisassemblerImpl (dis_client *client)

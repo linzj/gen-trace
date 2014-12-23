@@ -8,6 +8,7 @@
 #include <stdlib.h>
 #include <errno.h>
 #include <string>
+#include <unistd.h>
 
 // machine base
 #ifdef __x86_64__
