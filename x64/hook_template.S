@@ -29,8 +29,7 @@ template_for_hook:
   # build the function argument.
   movq 80(%rsp), %rdi #the caller.
   movq .Lname(%rip), %rsi #the name of function, make char *.
-  movq .Lhook_function(%rip) , %rax
-  callq *%rax # gogogogo
+  callq *.Lhook_function(%rip) # gogogogo
   popq %rbp
   popq %rbp
   popq %rbx
