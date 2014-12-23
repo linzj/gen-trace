@@ -16,8 +16,10 @@
 #include <new>
 #include <vector>
 
-#ifndef CTRACE_FILE_NAME
+#ifdef __ANDROID__
 #define CTRACE_FILE_NAME "/sdcard/trace_%d.json"
+#else
+#define CTRACE_FILE_NAME "trace_%d.json"
 #endif // CTRACE_FILE_NAME
 #define CRASH()                                                               \
   do                                                                          \
@@ -67,7 +69,6 @@ struct ThreadInfo
   int64_t virtual_time_;
   trace_vector stack_;
 
-  int stack_end_;
 #ifdef STR_TO_ENABLE
   bool enable_;
 #endif
@@ -118,7 +119,6 @@ ThreadInfo::ThreadInfo ()
 {
   pid_ = getpid ();
   tid_ = syscall (__NR_gettid, 0);
-  stack_end_ = 0;
   virtual_time_ = 0;
 #ifdef STR_TO_ENABLE
   enable_ = false;
@@ -379,38 +379,35 @@ __start_ctrace__ (void *original_ret, const char *name)
 #endif // STR_TO_ENABLE
   int64_t currentTime = tinfo->UpdateVirtualTime (true);
 
-  if (tinfo->stack_end_ < ThreadInfo::max_stack)
-    {
-      CTraceStruct *cs = new (c) CTraceStruct (name, currentTime);
-      tinfo->stack_[tinfo->stack_end_] = cs;
-    }
-  tinfo->stack_end_++;
+  CTraceStruct cs (name, currentTime, original_ret);
+  tinfo->stack_.push_back (cs);
 }
 
 void *
 __end_ctrace__ (void)
 {
-  if (file_to_write == 0)
-    return;
   ThreadInfo *tinfo = GetThreadInfo ();
-#ifdef STR_TO_ENABLE
-  if (!tinfo->enable_)
-    return;
-#endif // STR_TO_ENABLE
-  tinfo->stack_end_--;
+  CTraceStruct c = tinfo->stack_.back ();
+  tinfo->stack_.pop_back ();
   int64_t currentTime = tinfo->UpdateVirtualTime (false);
-  if (tinfo->stack_end_ < ThreadInfo::max_stack)
+  if ((file_to_write != NULL)
+      && (tinfo->stack_.size () < ThreadInfo::max_stack))
     {
-      if (c->start_time_ != invalid_time)
+#ifdef STR_TO_ENABLE
+      if (!tinfo->enable_)
+        return c.ret_addr_;
+#endif // STR_TO_ENABLE
+      if (c.start_time_ != invalid_time)
         {
           // we should record this
-          c->end_time_ = currentTime;
-          if (c->end_time_ - c->start_time_ >= min_interval)
-            RecordThis (c, tinfo);
+          c.end_time_ = currentTime;
+          if (c.end_time_ - c.start_time_ >= min_interval)
+            RecordThis (&c, tinfo);
         }
     }
 #ifdef STR_TO_ENABLE
-  if (tinfo->stack_end_ == 0)
+  if (tinfo->stack_.size () == 0)
     tinfo->enable_ = false;
 #endif // STR_TO_ENABLE
+  return c.ret_addr_;
 }
