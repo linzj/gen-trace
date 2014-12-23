@@ -62,8 +62,14 @@ x64_dis_client::on_instr (const char *dis_str)
                      { "mul", 3 },
                      { "div", 3 },
                      { "xor", 3 },
+                     { "pxor", 4 },
+                     { "cvtsi2", 6 },
+                     { "cltd", 4 },
                      { "or", 2 },
                      { "and", 3 },
+                     { "cmp", 3 },
+                     { "shr", 3 },
+                     { "shl", 3 },
                      { "test", 4 } };
   for (size_t i = 0; i < sizeof (check_list) / sizeof (check_list[0]); ++i)
     {
@@ -79,20 +85,10 @@ x64_dis_client::on_instr (const char *dis_str)
       return;
     }
   // check if rip position independent code is here.
-  {
-    const char *test;
-    if ((test = strstr (dis_str, "[0x")))
-      {
-        while (*test != ']' && *test != '\0')
-          {
-            if (*test == '+')
-              break;
-            ++test;
-          }
-        if (*test == ']' || *test == '\0')
-          is_accept_ = false;
-      }
-  }
+  if (strstr (dis_str, "rip"))
+    {
+      is_accept_ = false;
+    }
 }
 
 bool
