@@ -32,8 +32,8 @@ main ()
   assert (cc->code_point == &data[0]);
   assert (target_client->build_trampoline (&code_manager, cc));
   assert (cc->trampoline_code_start != 0);
-  mem_modify_instr *instr
-      = target_client->modify_code (cc, (void *)main, (void *)main);
+  mem_modify_instr *instr = target_client->modify_code (
+      cc, (pfn_called_callback)main, (pfn_ret_callback)main);
   assert (instr);
   free (instr);
 }
