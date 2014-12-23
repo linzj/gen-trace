@@ -60,8 +60,10 @@ base_controller::do_rest_with_config (config_desc *config_desc)
     {
       for (int i = 0; i < config_desc->desc_array_size; ++i)
         {
-          *reinterpret_cast<intptr_t *> (
-              &config_desc->desc_array[i].code_point) += base;
+          intptr_t v = reinterpret_cast<intptr_t> (
+              config_desc->desc_array[i].code_point);
+          v += base;
+          config_desc->desc_array[i].code_point = reinterpret_cast<void *> (v);
         }
     }
   do_modify (config_desc);
