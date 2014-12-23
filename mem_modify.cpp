@@ -39,7 +39,7 @@ modify (const struct mem_modify_instr **instr, int count_of_instr)
       for (j = 0; j < count_for_long;
            ++j, data += sizeof (long), where += sizeof (long))
         {
-          intptr_t ptr_size_data;
+          long ptr_size_data;
           memcpy (&ptr_size_data, data, sizeof (long));
           if (-1 == ptrace (PTRACE_POKEDATA, target_pid, where, ptr_size_data))
             {
@@ -58,7 +58,7 @@ modify (const struct mem_modify_instr **instr, int count_of_instr)
 
       for (j = 0; j < left; ++j)
         {
-          long _data = data[j];
+          long _data = data[j] & 0xff;
           long mask = 0xff;
           _data <<= j * 8;
           mask <<= j * 8;

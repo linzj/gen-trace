@@ -1,5 +1,6 @@
 #include "code_modify.h"
 #include "base_controller.h"
+#include "log.h"
 #include <fstream>
 #include <string>
 

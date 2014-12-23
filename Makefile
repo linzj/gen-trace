@@ -14,7 +14,9 @@ MAIN_OBJS := log.o \
 		code_manager_impl.o \
 		code_modify.o \
 		config_reader.o \
-		base_controller.o
+		base_controller.o \
+		runtime_stack.o \
+		entry.o
 
 MAIN_TEST_OBJS :=  \
 				  mem_modify_test.o \
@@ -23,8 +25,6 @@ MAIN_TEST_OBJS :=  \
 				  config_reader_test.o \
 				  base_controller_test.o \
 				  base_controller_test_lib.o \
-				  runtime_stack.o \
-				  entry.o
 
 X64_MAIN_OBJS := \
 				  x64/dis.o \
@@ -48,6 +48,7 @@ OBJS := $(MAIN_OBJS) \
 CFLAGS := -O0 -g -Wall -I. -fPIC -fvisibility=hidden
 
 LDFLAGS := -pie
+LDLIBS := -lpthread -lrt
 
 -include $(OBJS:.o=.d)
 
@@ -89,5 +90,5 @@ clean:
 test_all: $(TESTS)
 	$(foreach test, $^, $(info ./$(test)))
 
-libtrace.so: $(MAIN_OBJS)
-	g++ $(LDFLAGS) -shared -o $@ $^
+libtrace.so: $(MAIN_OBJS) $(X64_MAIN_OBJS)
+	g++ $(LDFLAGS) -Wl,--no-undefined -shared -o $@ $^ $(LDLIBS)
