@@ -41,6 +41,7 @@ code_modify (const code_modify_desc *code_points, int count_of,
               mem_modify_instr *instr = g_client->modify_code (
                   context, called_callback, return_callback);
               v.push_back (instr);
+              fprintf (fp_for_fail, "build okay: %p, %s\n", code_point, name);
             }
           else if (fp_for_fail)
             {
