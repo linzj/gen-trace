@@ -134,7 +134,9 @@ extern void template_for_hook_end (void);
 
 // the layout is in the hook_template.S
 bool
-x64_target_client::build_trampoline (code_manager *m, code_context *context)
+x64_target_client::build_trampoline (code_manager *m, code_context *context,
+                                     pfn_called_callback called_callback,
+                                     pfn_ret_callback return_callback)
 {
   static const int copy_size = (char *)template_for_hook_end
                                - (char *)template_for_hook;
@@ -147,7 +149,7 @@ x64_target_client::build_trampoline (code_manager *m, code_context *context)
   // check if we can jump to our code.
   intptr_t code_mem_int = reinterpret_cast<intptr_t> (code_mem);
   intptr_t code_start = code_mem_int + 8 * 4;
-  intptr_t target_code_point
+  const intptr_t target_code_point
       = reinterpret_cast<intptr_t> (context->code_point);
   intptr_t jump_dist = code_start
                        - (target_code_point + byte_needed_to_modify);
@@ -170,27 +172,28 @@ x64_target_client::build_trampoline (code_manager *m, code_context *context)
 
   int code_len = reinterpret_cast<intptr_t> (context->machine_defined);
   memcpy (copy_start, context->code_point, code_len);
-  return true;
-}
-
-mem_modify_instr *
-x64_target_client::modify_code (code_context *context,
-                                pfn_called_callback called_callback,
-                                pfn_ret_callback return_callback)
-{
   context->called_callback = called_callback;
   context->return_callback = return_callback;
   const char *function_name = context->function_name;
   const void **modify_pointer
       = static_cast<const void **> (context->trampoline_code_start);
-  char *target_code_point = static_cast<char *> (context->code_point);
   int modified_code_len
       = reinterpret_cast<intptr_t> (context->machine_defined);
   modify_pointer[-4] = function_name;
   modify_pointer[-3] = (void *)called_callback;
-  modify_pointer[-2] = target_code_point + modified_code_len;
+  modify_pointer[-2]
+      = reinterpret_cast<void *> (target_code_point + modified_code_len);
   modify_pointer[-1] = (void *)return_callback;
   // At here the code mem has been modified completely.
+  // But x86 does not need to flush.
+  return true;
+}
+
+mem_modify_instr *
+x64_target_client::modify_code (code_context *context)
+{
+  const intptr_t target_code_point
+      = reinterpret_cast<intptr_t> (context->code_point);
   int code_len = reinterpret_cast<intptr_t> (context->machine_defined);
   mem_modify_instr *instr = static_cast<mem_modify_instr *> (
       malloc (sizeof (mem_modify_instr) + code_len - 1));

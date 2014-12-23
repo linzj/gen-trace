@@ -19,7 +19,9 @@ private:
     return true;
   }
   virtual bool
-  build_trampoline (code_manager *code_manager, code_context *context)
+  build_trampoline (code_manager *code_manager, code_context *context,
+                    pfn_called_callback called_callback,
+                    pfn_ret_callback return_callback)
   {
     code_context *c = context;
     assert (c != 0);
@@ -27,19 +29,18 @@ private:
     assert (code != 0);
     c->trampoline_code_start = code;
     c->trampoline_code_end = static_cast<char *> (code) + 9;
+    c->called_callback = called_callback;
+    c->return_callback = return_callback;
     return c;
   }
   virtual mem_modify_instr *
-  modify_code (code_context *context, pfn_called_callback called_callback,
-               pfn_ret_callback return_callback)
+  modify_code (code_context *context)
   {
     mem_modify_instr *instr = static_cast<mem_modify_instr *> (
         calloc (1, sizeof (mem_modify_instr) + 9));
     assert (instr != NULL);
     instr->where = to_modify;
     instr->size = 9;
-    context->called_callback = called_callback;
-    context->return_callback = return_callback;
     memcpy (instr->data, "123456789", 9);
     return instr;
   }

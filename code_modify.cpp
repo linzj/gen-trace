@@ -36,12 +36,13 @@ code_modify (const code_modify_desc *code_points, int count_of,
       if (g_client->check_code (code_point, name, size, g_code_manager,
                                 &context))
         {
-          if (g_client->build_trampoline (g_code_manager, context))
+          if (g_client->build_trampoline (g_code_manager, context,
+                                          called_callback, return_callback))
             {
-              mem_modify_instr *instr = g_client->modify_code (
-                  context, called_callback, return_callback);
+              mem_modify_instr *instr = g_client->modify_code (context);
               v.push_back (instr);
-              fprintf (fp_for_fail, "build okay: %p, %s\n", code_point, name);
+              if (fp_for_fail)
+                fprintf (fp_for_fail, "build okay: %p, %s\n", code_point, name);
             }
           else if (fp_for_fail)
             {

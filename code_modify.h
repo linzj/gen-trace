@@ -39,10 +39,10 @@ public:
   // check if code accept to modify, and turn the context via the 2nd argument.
   virtual bool check_code (void *, const char *, int code_size, code_manager *,
                            code_context **) = 0;
-  virtual bool build_trampoline (code_manager *, code_context *) = 0;
-  virtual mem_modify_instr *modify_code (code_context *,
-                                         pfn_called_callback called_callback,
-                                         pfn_ret_callback return_callback) = 0;
+  virtual bool build_trampoline (code_manager *, code_context *,
+                                 pfn_called_callback called_callback,
+                                 pfn_ret_callback return_callback) = 0;
+  virtual mem_modify_instr *modify_code (code_context *) = 0;
 };
 
 struct code_modify_desc
