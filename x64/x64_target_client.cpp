@@ -146,7 +146,7 @@ check_for_back_edge (char *start, char *hook_end, char *code_end)
   return dis_client.is_accept ();
 }
 
-bool
+target_client::check_code_status
 x64_target_client::check_code (void *code_point, const char *name,
                                int code_size, code_manager *m,
                                code_context **ppcontext)
@@ -156,7 +156,7 @@ x64_target_client::check_code (void *code_point, const char *name,
   char *start = static_cast<char *> (code_point);
   int current = 0;
   if (code_size < byte_needed_to_modify)
-    return false;
+    return check_code_too_small;
   while (current < byte_needed_to_modify && dis_client.is_accept ())
     {
       int len = dis.InstructionDecode (start);
@@ -165,25 +165,25 @@ x64_target_client::check_code (void *code_point, const char *name,
     }
   if (dis_client.is_accept () == false)
     {
-      return false;
+      return check_code_not_accept;
     }
   if (current > max_tempoline_insert_space)
     {
-      return false;
+      return check_code_exceed_trampoline;
     }
   if (!check_for_back_edge (static_cast<char *> (code_point), start,
                             static_cast<char *> (code_point) + code_size))
     {
-      return false;
+      return check_code_back_edge;
     }
   code_context *context;
   context = m->new_context (name);
   if (context == NULL)
-    return false;
+    return check_code_memory;
   context->code_point = code_point;
   context->machine_defined = reinterpret_cast<void *> (current);
   *ppcontext = context;
-  return true;
+  return check_code_okay;
 }
 
 extern "C" {

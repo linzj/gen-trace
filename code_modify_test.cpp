@@ -9,14 +9,14 @@ class test_target_client : public target_client
 public:
 private:
   char to_modify[9];
-  virtual bool
+  virtual check_code_status
   check_code (void *target, const char *name, int code_size,
               code_manager *code_manager, code_context **ppcontext)
   {
     code_context *context;
     *ppcontext = context = code_manager->new_context (name);
     context->code_point = target;
-    return true;
+    return check_code_okay;
   }
   virtual bool
   build_trampoline (code_manager *code_manager, code_context *context,

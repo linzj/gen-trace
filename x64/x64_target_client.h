@@ -9,8 +9,8 @@ public:
   ~x64_target_client ();
 
 private:
-  virtual bool check_code (void *, const char *, int code_size, code_manager *,
-                           code_context **);
+  virtual check_code_status check_code (void *, const char *, int code_size,
+                                        code_manager *, code_context **);
   virtual bool build_trampoline (code_manager *, code_context *,
                                  pfn_called_callback called_callback,
                                  pfn_ret_callback return_callback);

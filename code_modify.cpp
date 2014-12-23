@@ -33,8 +33,10 @@ code_modify (const code_modify_desc *code_points, int count_of,
       void *code_point = code_points[i].code_point;
       const char *name = code_points[i].name;
       int size = code_points[i].size;
-      if (g_client->check_code (code_point, name, size, g_code_manager,
-                                &context))
+      target_client::check_code_status check_code_status;
+      if (target_client::check_code_okay
+          == (check_code_status = g_client->check_code (
+                  code_point, name, size, g_code_manager, &context)))
         {
           if (g_client->build_trampoline (g_code_manager, context,
                                           called_callback, return_callback))
@@ -54,7 +56,8 @@ code_modify (const code_modify_desc *code_points, int count_of,
       else
         {
           if (fp_for_fail)
-            fprintf (fp_for_fail, "check code: %p, %s\n", code_point, name);
+            fprintf (fp_for_fail, "check code: %p, %s, %d\n", code_point, name,
+                     check_code_status);
         }
     }
   if (fp_for_fail)

@@ -34,11 +34,20 @@ public:
 class target_client
 {
 public:
+  enum check_code_status
+  {
+    check_code_okay,
+    check_code_not_accept,
+    check_code_exceed_trampoline,
+    check_code_back_edge,
+    check_code_too_small,
+    check_code_memory,
+  };
   virtual ~target_client ();
 
   // check if code accept to modify, and turn the context via the 2nd argument.
-  virtual bool check_code (void *, const char *, int code_size, code_manager *,
-                           code_context **) = 0;
+  virtual check_code_status check_code (void *, const char *, int code_size,
+                                        code_manager *, code_context **) = 0;
   virtual bool build_trampoline (code_manager *, code_context *,
                                  pfn_called_callback called_callback,
                                  pfn_ret_callback return_callback) = 0;
