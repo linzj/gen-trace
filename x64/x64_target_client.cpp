@@ -6,6 +6,7 @@
 #include "dis.h"
 #include "dis_client.h"
 #include "mem_modify.h"
+#include "log.h"
 
 // jmp *xxxx;
 const static int byte_needed_to_modify = 5;
@@ -78,10 +79,20 @@ x64_dis_client::on_instr (const char *dis_str)
       return;
     }
   // check if rip position independent code is here.
-  if (strstr (dis_str, "rip"))
-    {
-      is_accept_ = false;
-    }
+  {
+    const char *test;
+    if ((test = strstr (dis_str, "[0x")))
+      {
+        while (*test != ']' && *test != '\0')
+          {
+            if (*test == '+')
+              break;
+            ++test;
+          }
+        if (*test == ']' || *test == '\0')
+          is_accept_ = false;
+      }
+  }
 }
 
 bool

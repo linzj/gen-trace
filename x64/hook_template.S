@@ -64,12 +64,12 @@ template_for_hook2:
   pushq %rsi
   movq .Lret_jump(%rip), %rax
   callq *%rax
-  movq %rax, %r15 # real return point goes to rax
+  movq %rax, %rcx # real return point goes to rax
   popq %rsi
   popq %rdi
   popq %rdx
   popq %rax
-  jmpq *%r15
+  jmpq *%rcx
 
 .globl template_for_hook_end
 .hidden template_for_hook_end

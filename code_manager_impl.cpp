@@ -46,7 +46,7 @@ code_manager_impl::new_code_mem (void *hint, size_t s)
   intptr_t hint_i = reinterpret_cast<intptr_t> (hint);
   intptr_t current_page_i = reinterpret_cast<intptr_t> (current_page_);
   if (current_page_i && (current_page_i <= (hint_i + 0x7fffffff))
-      && (current_page_i >= (hint_i - 0x7fffffff)))
+      && (current_page_i >= (hint_i - 0x7fffffff)) && (left_ >= s))
     {
       void *ret = current_page_;
       current_page_ += s;
