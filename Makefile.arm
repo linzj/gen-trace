@@ -6,7 +6,8 @@ TESTS := mem_modify_test \
 code_manager_impl_test \
 code_modify_test \
 config_reader_test \
-hook_template_test
+hook_template_test \
+dis_arm_test
 
 test: $(TESTS)
 MAIN_OBJS := log.o \
@@ -31,10 +32,13 @@ MAIN_TEST_OBJS :=  \
 
 ARM_MAIN_OBJS := \
 				 arm/hook_template.o \
-				 arm/flush_code.o
+				 arm/flush_code.o \
+				 arm/dis_gnu.o \
+				 arm/dis.o
 
 ARM_TEST_OBJS := \
-				 arm/hook_template_test.o
+				 arm/hook_template_test.o \
+				 arm/dis_test.o
 
 
 OBJS := $(MAIN_OBJS) \
@@ -78,9 +82,9 @@ code_modify_test: code_modify_test.o log.o code_manager_impl.o code_modify.o mem
 config_reader_test: config_reader.o config_reader_test.o log.o
 	$(CXX) $(LDFLAGS) -o $@ $^ $(LDLIBS)
 
-#dis_x64_test: x64/dis.o x64/dis_test.o x64/dis_gnu.o log.o disassembler.o dis_client.o
-#	$(CXX) $(LDFLAGS) -o $@ $^
-#
+dis_arm_test: arm/dis.o arm/dis_test.o arm/dis_gnu.o log.o disassembler.o dis_client.o
+	$(CXX) $(LDFLAGS) -o $@ $^ $(LDLIBS)
+
 hook_template_test: arm/hook_template_test.o arm/hook_template.o arm/flush_code.o log.o
 	$(CXX) $(LDFLAGS) -o $@ $^ $(LDLIBS)
 #x64_target_client_test: x64/hook_template.o x64/dis.o x64/dis_gnu.o x64/x64_target_client.o x64/x64_target_client_test.o code_manager_impl.o log.o code_modify.o mem_modify.o disassembler.o dis_client.o base_target_client.o

@@ -82,7 +82,8 @@ main ()
   static const int template_size1 = (char *)template_for_hook2
                                     - (char *)template_for_hook;
   intptr_t template_for_hook_addr = ((intptr_t)template_for_hook) & -2;
-  memcpy (&modify_pointer[4], (char *)template_for_hook_addr, template_size1 + template_size2);
+  memcpy (&modify_pointer[4], (char *)template_for_hook_addr,
+          template_size1 + template_size2);
   // memcpy ((char *)&modify_pointer[4] + template_size1,
   //         (char *)template_for_hook2, template_size2);
   typedef const char *(*pfn)(int a, int b, int c, int d, int e, int f, int g);
