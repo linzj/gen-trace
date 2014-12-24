@@ -18,7 +18,11 @@ private:
     s_.assign (instr);
   }
   void on_addr (intptr_t) {}
-  virtual bool is_accept() { return true ; }
+  virtual bool
+  is_accept ()
+  {
+    return true;
+  }
 };
 
 const char code[] = "\x41"

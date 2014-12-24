@@ -1,0 +1,92 @@
+.PHONY: all test
+all:libtrace.so
+TESTS := mem_modify_test \
+code_manager_impl_test \
+code_modify_test \
+config_reader_test
+
+test: $(TESTS)
+MAIN_OBJS := log.o \
+		mem_modify.o \
+		code_manager_impl.o \
+		code_modify.o \
+		config_reader.o \
+		base_controller.o \
+		runtime_stack.o \
+		entry.o \
+		base_target_client.o \
+		dis_client.o \
+		disassembler.o
+
+MAIN_TEST_OBJS :=  \
+				  mem_modify_test.o \
+				  code_modify_test.o \
+				  code_manager_impl_test.o \
+				  config_reader_test.o \
+				  base_controller_test.o \
+				  base_controller_test_lib.o \
+
+ARM_MAIN_OBJS := \
+
+ARM_TEST_OBJS := \
+
+
+OBJS := $(MAIN_OBJS) \
+		\
+		$(MAIN_TEST_OBJS) \
+		\
+		$(X64_MAIN_OBJS) \
+		\
+		$(X64_TEST_OBJS)
+
+CFLAGS := -O0 -g -Wall -I. -fPIC -fvisibility=hidden
+
+LDFLAGS := -pie
+LDLIBS := -lpthread -lrt
+CC=arm-linux-androideabi-gcc
+CXX=arm-linux-androideabi-gcc
+
+-include $(OBJS:.o=.d)
+
+%.o: %.c
+	$(CC) $(CFLAGS) -c $*.c -o $*.o
+	$(CC) -MM $(CFLAGS) $*.c > $*.d
+
+%.o: %.cpp
+	$(CXX) $(CFLAGS) -c $*.cpp -o $*.o
+	$(CXX) -MM $(CFLAGS) $*.cpp > $*.d
+
+%.o: %.S
+	$(CXX) $(CFLAGS) -c $*.S -o $*.o
+	$(CXX) -MM $(CFLAGS) $*.S > $*.d
+
+mem_modify_test: mem_modify_test.o log.o mem_modify.o
+	$(CXX) $(LDFLAGS) -o $@ $^
+
+code_manager_impl_test: code_manager_impl.o log.o code_manager_impl_test.o
+	$(CXX) $(LDFLAGS) -o $@ $^
+
+code_modify_test: code_modify_test.o log.o code_manager_impl.o code_modify.o mem_modify.o
+	$(CXX) $(LDFLAGS) -o $@ $^
+
+config_reader_test: config_reader.o config_reader_test.o log.o
+	$(CXX) $(LDFLAGS) -o $@ $^
+
+#dis_x64_test: x64/dis.o x64/dis_test.o x64/dis_gnu.o log.o disassembler.o dis_client.o
+#	$(CXX) $(LDFLAGS) -o $@ $^
+#
+#hook_template_test: x64/hook_template_test.o x64/hook_template.o log.o
+#	$(CXX) $(LDFLAGS) -o $@ $^
+#x64_target_client_test: x64/hook_template.o x64/dis.o x64/dis_gnu.o x64/x64_target_client.o x64/x64_target_client_test.o code_manager_impl.o log.o code_modify.o mem_modify.o disassembler.o dis_client.o base_target_client.o
+#	$(CXX) $(LDFLAGS) -o $@ $^
+
+#base_controller_test: config_reader.o  base_controller.o code_manager_impl.o log.o code_modify.o mem_modify.o x64/hook_template.o x64/dis.o x64/dis_gnu.o x64/x64_target_client.o base_controller_test.o libbase_controller_test_lib.so disassembler.o dis_client.o base_target_client.o
+#	$(CXX) $(LDFLAGS) -Wl,-rpath,. -o $@ $(filter %.o, $^) -L. -lbase_controller_test_lib
+
+clean:
+	rm *.o *.d **/*.o **/*.d
+test_all: $(TESTS)
+	$(foreach test, $^, $(info ./$(test)))
+
+libtrace.so: $(MAIN_OBJS) $(ARM_MAIN_OBJS)
+	g++ $(LDFLAGS) -Wl,--no-undefined -shared -o $@ $^ $(LDLIBS)

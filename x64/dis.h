@@ -19,7 +19,7 @@ public:
   // Returns the length of the disassembled machine instruction in bytes.
   virtual int instruction_decode (char *start);
 
-  virtual void set_client(dis_client *client);
+  virtual void set_client (dis_client *client);
 
 private:
   class DisassemblerImpl;

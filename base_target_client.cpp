@@ -5,11 +5,15 @@
 #include "dis_client.h"
 
 bool
-base_target_client::check_for_back_edge (disassembler *dis, char *start, char *hook_end, char *code_end)
+base_target_client::check_for_back_edge (disassembler *dis, char *start,
+                                         char *hook_end, char *code_end)
 {
-  std::auto_ptr<dis_client> backedge_check_client(new_backedge_check_client(reinterpret_cast<intptr_t>(start), reinterpret_cast<intptr_t>(hook_end)));
-  dis->set_client(backedge_check_client.get());
-  for (char *i = hook_end; i < code_end && backedge_check_client->is_accept ();)
+  std::auto_ptr<dis_client> backedge_check_client (
+      new_backedge_check_client (reinterpret_cast<intptr_t> (start),
+                                 reinterpret_cast<intptr_t> (hook_end)));
+  dis->set_client (backedge_check_client.get ());
+  for (char *i = hook_end;
+       i < code_end && backedge_check_client->is_accept ();)
     {
       int len = dis->instruction_decode (i);
       i += len;
@@ -17,14 +21,15 @@ base_target_client::check_for_back_edge (disassembler *dis, char *start, char *h
   return backedge_check_client->is_accept ();
 }
 
-target_client::check_code_status base_target_client::check_code (void *code_point, const char *name,
-                               int code_size, code_manager *m,
-                               code_context **ppcontext)
+target_client::check_code_status
+base_target_client::check_code (void *code_point, const char *name,
+                                int code_size, code_manager *m,
+                                code_context **ppcontext)
 {
   std::auto_ptr<dis_client> code_check_client (new_code_check_client ());
   std::auto_ptr<disassembler> dis (new_disassembler ());
-  dis->set_client (code_check_client.get());
-  int _byte_needed_to_modify = byte_needed_to_modify();
+  dis->set_client (code_check_client.get ());
+  int _byte_needed_to_modify = byte_needed_to_modify ();
   char *start = static_cast<char *> (code_point);
   int current = 0;
   if (code_size < _byte_needed_to_modify)
@@ -39,11 +44,12 @@ target_client::check_code_status base_target_client::check_code (void *code_poin
     {
       return check_code_not_accept;
     }
-  if (current > max_tempoline_insert_space())
+  if (current > max_tempoline_insert_space ())
     {
       return check_code_exceed_trampoline;
     }
-  if (!check_for_back_edge (dis.get(), static_cast<char *> (code_point), start,
+  if (!check_for_back_edge (dis.get (), static_cast<char *> (code_point),
+                            start,
                             static_cast<char *> (code_point) + code_size))
     {
       return check_code_back_edge;
@@ -58,16 +64,17 @@ target_client::check_code_status base_target_client::check_code (void *code_poin
   return check_code_okay;
 }
 
-bool base_target_client::build_trampoline (code_manager *m, code_context *context,
-                                     pfn_called_callback called_callback,
-                                     pfn_ret_callback return_callback)
+bool
+base_target_client::build_trampoline (code_manager *m, code_context *context,
+                                      pfn_called_callback called_callback,
+                                      pfn_ret_callback return_callback)
 {
-  char * const _template_start = template_start();
-  char * const _template_ret_start = template_ret_start();
-  char * const _template_end = template_end();
+  char *const _template_start = template_start ();
+  char *const _template_ret_start = template_ret_start ();
+  char *const _template_end = template_end ();
   const int template_code_size = (char *)_template_end
-                               - (char *)_template_start;
-  const int template_size = template_code_size + sizeof(intptr_t) * 4;
+                                 - (char *)_template_start;
+  const int template_size = template_code_size + sizeof (intptr_t) * 4;
   void *code_mem = m->new_code_mem (context->code_point, template_size);
   if (!code_mem)
     {
@@ -75,7 +82,7 @@ bool base_target_client::build_trampoline (code_manager *m, code_context *contex
     }
   // check if we can jump to our code.
   intptr_t code_mem_int = reinterpret_cast<intptr_t> (code_mem);
-  intptr_t code_start = code_mem_int + sizeof(intptr_t) * 4;
+  intptr_t code_start = code_mem_int + sizeof (intptr_t) * 4;
   const intptr_t target_code_point
       = reinterpret_cast<intptr_t> (context->code_point);
   // FIXME: need to delete code mem before returns
@@ -91,7 +98,7 @@ bool base_target_client::build_trampoline (code_manager *m, code_context *contex
   // copy the original target code to trampoline
   char *copy_start = reinterpret_cast<char *> (code_start)
                      + (_template_ret_start - _template_start)
-                     - max_tempoline_insert_space();
+                     - max_tempoline_insert_space ();
 
   int code_len = reinterpret_cast<intptr_t> (context->machine_defined);
   memcpy (copy_start, context->code_point, code_len);

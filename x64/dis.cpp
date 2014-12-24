@@ -89,10 +89,7 @@ extern int print_insn_i386 (bfd_vma, disassemble_info *);
 
 namespace disasm
 {
-Disassembler::Disassembler ()
-    : impl_ (new DisassemblerImpl ())
-{
-}
+Disassembler::Disassembler () : impl_ (new DisassemblerImpl ()) {}
 
 Disassembler::~Disassembler () {}
 
@@ -109,7 +106,7 @@ Disassembler::instruction_decode (char *start)
 }
 
 void
-Disassembler::set_client(dis_client *client)
+Disassembler::set_client (dis_client *client)
 {
   impl_->client_ = client;
 }

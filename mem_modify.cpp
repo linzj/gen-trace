@@ -1,11 +1,11 @@
 #include "mem_modify.h"
 #include "log.h"
 
-#include <sys/prctl.h>
 #include <sys/ptrace.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <sys/socket.h>
+#include <sys/prctl.h>
 
 #include <unistd.h>
 #include <errno.h>
@@ -34,14 +34,15 @@ modify (const struct mem_modify_instr **instr, int count_of_instr)
       int count_for_long = instr[i]->size / sizeof (long);
       int left = instr[i]->size % sizeof (long);
       const char *data = &instr[i]->data[0];
-      const char *where = static_cast<const char *> (instr[i]->where);
+      char *where = static_cast<char *> (instr[i]->where);
       int j;
       for (j = 0; j < count_for_long;
            ++j, data += sizeof (long), where += sizeof (long))
         {
           long ptr_size_data;
           memcpy (&ptr_size_data, data, sizeof (long));
-          if (-1 == ptrace (PTRACE_POKEDATA, target_pid, where, ptr_size_data))
+          if (-1 == ptrace (PTRACE_POKEDATA, target_pid, where,
+                            reinterpret_cast<void *> (ptr_size_data)))
             {
               LOGE ("ptrace poke data fails %s\n", strerror (errno));
               break;
@@ -65,7 +66,8 @@ modify (const struct mem_modify_instr **instr, int count_of_instr)
           mask = ~mask;
           left_data = (left_data & mask) | _data;
         }
-      if (-1 == ptrace (PTRACE_POKEDATA, target_pid, where, left_data))
+      if (-1 == ptrace (PTRACE_POKEDATA, target_pid, where,
+                        reinterpret_cast<void *> (left_data)))
         {
           LOGE ("ptrace peek data (left) fails %s\n", strerror (errno));
           continue;
@@ -93,10 +95,10 @@ mem_modify (const struct mem_modify_instr **instr, int count_of_instr)
     {
       int status;
       int num = 0;
+      int readret;
 #ifdef PR_SET_PTRACER
       int ptrctlret = prctl (PR_SET_PTRACER, forkret, 0, 0, 0);
       int writeret;
-      int readret;
       do
         {
           writeret = write (sv[0], &ptrctlret, sizeof (ptrctlret));
@@ -116,17 +118,16 @@ mem_modify (const struct mem_modify_instr **instr, int count_of_instr)
           readret = read (sv[0], &num, sizeof (num));
         }
       while (readret == -1 && errno == EINTR);
-    fails:
       close (sv[0]);
       waitpid (forkret, &status, 0);
       return num;
     }
   else if (forkret == 0)
     {
+      int writeret;
 #ifdef PR_SET_PTRACER
       int val;
       int readret;
-      int writeret;
       do
         {
           readret = read (sv[1], &val, sizeof (val));

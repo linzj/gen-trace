@@ -1,5 +1,3 @@
 #include "disassembler.h"
 
-disassembler::~disassembler()
-{
-}
+disassembler::~disassembler () {}
