@@ -118,6 +118,9 @@ mem_modify (const struct mem_modify_instr **instr, int count_of_instr)
           readret = read (sv[0], &num, sizeof (num));
         }
       while (readret == -1 && errno == EINTR);
+#ifdef PR_SET_PTRACER
+    fails:
+#endif
       close (sv[0]);
       waitpid (forkret, &status, 0);
       return num;
