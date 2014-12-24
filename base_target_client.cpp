@@ -79,7 +79,7 @@ bool base_target_client::build_trampoline (code_manager *m, code_context *contex
   const intptr_t target_code_point
       = reinterpret_cast<intptr_t> (context->code_point);
   // FIXME: need to delete code mem before returns
-  if (check_jump_dist (target_code_point, code_start))
+  if (!check_jump_dist (target_code_point, code_start))
     return false;
 
   context->trampoline_code_start = reinterpret_cast<char *> (code_start);
