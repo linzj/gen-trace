@@ -3,6 +3,7 @@
 .arch armv7-a
 .align  2
 .global template_for_hook
+.hidden template_for_hook
 .thumb
 .thumb_func
 .type	template_for_hook, %function
@@ -18,11 +19,12 @@ template_for_hook:
  #14 * 4, 8 byte aligned
   push.w {r0-r12, lr}
 # save lr to r0
-  ldr r0, [sp, $13 * 4]
   # minus 7 to ensure we are thumb mode.
-  mov r1, .Lret - .Lload_ret - 3
+  mov.w r1, .Lret - .Lload_ret - 4
+  add r1, #1
 .Lload_ret:
   add r1, pc, r1
+  ldr r0, [sp, $13 * 4]
   str r1, [sp, $13 * 4]
   ldr r1, .Lname
   ldr ip, .Lhook_function
@@ -46,6 +48,7 @@ template_for_hook:
   nop
   nop
 .global template_for_hook_thumb_ret
+.hidden template_for_hook_thumb_ret
 .thumb
 .thumb_func
 .type	template_for_hook_thumb_ret, %function
@@ -60,6 +63,7 @@ template_for_hook_thumb_ret:
   nop
   nop
 .global template_for_hook_arm_ret
+.hidden template_for_hook_arm_ret
 .type	template_for_hook_arm_ret, %function
 template_for_hook_arm_ret:
   ldr pc, .Ljump_back 
@@ -71,3 +75,7 @@ template_for_hook_arm_ret:
   mov ip, r0
   pop {r0-r3}
   bx ip
+.global template_for_hook_end
+.hidden template_for_hook_end
+.type template_for_hook_end, %function
+template_for_hook_end:
