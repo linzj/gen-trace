@@ -1,24 +1,25 @@
 #ifndef DIS_H
 #define DIS_H
 #include <memory>
+#include "disassembler.h"
 class dis_client;
 
 namespace disasm
 {
 
-typedef unsigned char byte;
-
 // A generic Disassembler interface
-class Disassembler
+class Disassembler : public disassembler
 {
 public:
   // Caller deallocates converter.
-  explicit Disassembler (dis_client *client);
+  explicit Disassembler ();
 
   ~Disassembler ();
 
   // Returns the length of the disassembled machine instruction in bytes.
-  int InstructionDecode (char *start);
+  virtual int instruction_decode (char *start);
+
+  virtual void set_client(dis_client *client);
 
 private:
   class DisassemblerImpl;

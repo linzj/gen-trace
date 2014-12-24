@@ -16,7 +16,10 @@ MAIN_OBJS := log.o \
 		config_reader.o \
 		base_controller.o \
 		runtime_stack.o \
-		entry.o
+		entry.o \
+		base_target_client.o \
+		dis_client.o \
+		disassembler.o
 
 MAIN_TEST_OBJS :=  \
 				  mem_modify_test.o \
@@ -74,12 +77,12 @@ code_manager_impl_test: code_manager_impl.o log.o code_manager_impl_test.o
 code_modify_test: code_modify_test.o log.o code_manager_impl.o code_modify.o mem_modify.o
 	g++ $(LDFLAGS) -o $@ $^
 
-dis_x64_test: x64/dis.o x64/dis_test.o x64/dis_gnu.o log.o
+dis_x64_test: x64/dis.o x64/dis_test.o x64/dis_gnu.o log.o disassembler.o dis_client.o
 	g++ $(LDFLAGS) -o $@ $^
 
 hook_template_test: x64/hook_template_test.o x64/hook_template.o log.o
 	g++ $(LDFLAGS) -o $@ $^
-x64_target_client_test: x64/hook_template.o x64/dis.o x64/dis_gnu.o x64/x64_target_client.o x64/x64_target_client_test.o code_manager_impl.o log.o code_modify.o mem_modify.o
+x64_target_client_test: x64/hook_template.o x64/dis.o x64/dis_gnu.o x64/x64_target_client.o x64/x64_target_client_test.o code_manager_impl.o log.o code_modify.o mem_modify.o disassembler.o dis_client.o base_target_client.o
 	g++ $(LDFLAGS) -o $@ $^
 config_reader_test: config_reader.o config_reader_test.o log.o
 	g++ $(LDFLAGS) -o $@ $^
@@ -87,7 +90,7 @@ config_reader_test: config_reader.o config_reader_test.o log.o
 libbase_controller_test_lib.so: base_controller_test_lib.o log.o
 	g++ -shared -o $@ $^
 
-base_controller_test: config_reader.o  base_controller.o code_manager_impl.o log.o code_modify.o mem_modify.o x64/hook_template.o x64/dis.o x64/dis_gnu.o x64/x64_target_client.o base_controller_test.o libbase_controller_test_lib.so
+base_controller_test: config_reader.o  base_controller.o code_manager_impl.o log.o code_modify.o mem_modify.o x64/hook_template.o x64/dis.o x64/dis_gnu.o x64/x64_target_client.o base_controller_test.o libbase_controller_test_lib.so disassembler.o dis_client.o base_target_client.o
 	g++ $(LDFLAGS) -Wl,-rpath,. -o $@ $(filter %.o, $^) -L. -lbase_controller_test_lib
 
 clean:

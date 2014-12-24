@@ -6,14 +6,13 @@
 #include <memory.h>
 #include <stdint.h>
 #include "dis_gnu.h"
-dis_client::~dis_client () {}
 
 namespace disasm
 {
 class Disassembler::DisassemblerImpl
 {
 public:
-  DisassemblerImpl (dis_client *);
+  DisassemblerImpl ();
   disassemble_info info_;
   dis_client *client_;
   char buf_[512];
@@ -70,8 +69,8 @@ Disassembler::DisassemblerImpl::print_address (bfd_vma addr,
   impl->client_->on_addr (addr);
 }
 
-Disassembler::DisassemblerImpl::DisassemblerImpl (dis_client *client)
-    : client_ (client), pos_ (&buf_[0])
+Disassembler::DisassemblerImpl::DisassemblerImpl ()
+    : client_ (NULL), pos_ (&buf_[0])
 {
   end_ = pos_ + 512;
   info_.fprintf_func = _fprintf_;
@@ -90,15 +89,15 @@ extern int print_insn_i386 (bfd_vma, disassemble_info *);
 
 namespace disasm
 {
-Disassembler::Disassembler (dis_client *client)
-    : impl_ (new DisassemblerImpl (client))
+Disassembler::Disassembler ()
+    : impl_ (new DisassemblerImpl ())
 {
 }
 
 Disassembler::~Disassembler () {}
 
 int
-Disassembler::InstructionDecode (char *start)
+Disassembler::instruction_decode (char *start)
 {
   int octets
       = print_insn_i386 (reinterpret_cast<bfd_vma> (start), &impl_->info_);
@@ -107,6 +106,12 @@ Disassembler::InstructionDecode (char *start)
       impl_->flush ();
     }
   return octets;
+}
+
+void
+Disassembler::set_client(dis_client *client)
+{
+  impl_->client_ = client;
 }
 
 // The X64 assembler does not use constant pools.

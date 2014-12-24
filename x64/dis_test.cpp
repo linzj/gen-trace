@@ -18,6 +18,7 @@ private:
     s_.assign (instr);
   }
   void on_addr (intptr_t) {}
+  virtual bool is_accept() { return true ; }
 };
 
 const char code[] = "\x41"
@@ -644,13 +645,14 @@ int
 main ()
 {
   test_dis_client c;
-  disasm::Disassembler dis (&c);
+  disasm::Disassembler dis;
+  dis.set_client (&c);
   const char *start = code;
   const char *end = start + sizeof (code) - 1;
   int i = 0;
   for (; start < end; ++i)
     {
-      int len = dis.InstructionDecode (const_cast<char *> (start));
+      int len = dis.instruction_decode (const_cast<char *> (start));
       start += len;
     }
   return 0;

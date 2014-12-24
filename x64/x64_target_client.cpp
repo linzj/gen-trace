@@ -9,8 +9,6 @@
 #include "log.h"
 
 // jmp *xxxx;
-const static int byte_needed_to_modify = 5;
-const static int max_tempoline_insert_space = 16;
 const static int max_positive_jump = 0x7fffffff;
 const static int max_negative_jump = 0x80000000;
 const static int nop = 0x90;
@@ -29,7 +27,7 @@ class x64_dis_client : public dis_client
 public:
   x64_dis_client () : is_accept_ (true) {}
   inline bool
-  is_accept () const
+  is_accept ()
   {
     return is_accept_;
   }
@@ -100,7 +98,7 @@ public:
   x64_test_back_egde_client (intptr_t base, intptr_t hook_end);
 
   bool
-  is_accept () const
+  is_accept ()
   {
     return is_accept_;
   }
@@ -132,123 +130,6 @@ x64_test_back_egde_client::on_addr (intptr_t ref)
     }
 }
 
-static bool
-check_for_back_edge (char *start, char *hook_end, char *code_end)
-{
-  x64_test_back_egde_client dis_client (reinterpret_cast<intptr_t> (start),
-                                        reinterpret_cast<intptr_t> (hook_end));
-  disasm::Disassembler dis (&dis_client);
-  for (char *i = hook_end; i < code_end && dis_client.is_accept ();)
-    {
-      int len = dis.InstructionDecode (i);
-      i += len;
-    }
-  return dis_client.is_accept ();
-}
-
-target_client::check_code_status
-x64_target_client::check_code (void *code_point, const char *name,
-                               int code_size, code_manager *m,
-                               code_context **ppcontext)
-{
-  x64_dis_client dis_client;
-  disasm::Disassembler dis (&dis_client);
-  char *start = static_cast<char *> (code_point);
-  int current = 0;
-  if (code_size < byte_needed_to_modify)
-    return check_code_too_small;
-  while (current < byte_needed_to_modify && dis_client.is_accept ())
-    {
-      int len = dis.InstructionDecode (start);
-      current += len;
-      start += len;
-    }
-  if (dis_client.is_accept () == false)
-    {
-      return check_code_not_accept;
-    }
-  if (current > max_tempoline_insert_space)
-    {
-      return check_code_exceed_trampoline;
-    }
-  if (!check_for_back_edge (static_cast<char *> (code_point), start,
-                            static_cast<char *> (code_point) + code_size))
-    {
-      return check_code_back_edge;
-    }
-  code_context *context;
-  context = m->new_context (name);
-  if (context == NULL)
-    return check_code_memory;
-  context->code_point = code_point;
-  context->machine_defined = reinterpret_cast<void *> (current);
-  *ppcontext = context;
-  return check_code_okay;
-}
-
-extern "C" {
-extern void template_for_hook (void);
-extern void template_for_hook2 (void);
-extern void template_for_hook_end (void);
-}
-
-// the layout is in the hook_template.S
-bool
-x64_target_client::build_trampoline (code_manager *m, code_context *context,
-                                     pfn_called_callback called_callback,
-                                     pfn_ret_callback return_callback)
-{
-  static const int copy_size = (char *)template_for_hook_end
-                               - (char *)template_for_hook;
-  static const int trampoline_size = copy_size + 8 * 4;
-  void *code_mem = m->new_code_mem (context->code_point, trampoline_size);
-  if (!code_mem)
-    {
-      return false;
-    }
-  // check if we can jump to our code.
-  intptr_t code_mem_int = reinterpret_cast<intptr_t> (code_mem);
-  intptr_t code_start = code_mem_int + 8 * 4;
-  const intptr_t target_code_point
-      = reinterpret_cast<intptr_t> (context->code_point);
-  intptr_t jump_dist = code_start
-                       - (target_code_point + byte_needed_to_modify);
-  // FIXME: need to delete code mem before returns
-  if (jump_dist < 0 && jump_dist < max_negative_jump)
-    return false;
-  if (jump_dist > 0 && jump_dist > max_positive_jump)
-    return false;
-
-  context->trampoline_code_start = reinterpret_cast<char *> (code_start);
-  context->trampoline_code_end = reinterpret_cast<char *> (code_start)
-                                 + copy_size;
-  // copy the hook template to code mem.
-  memcpy (reinterpret_cast<void *> (code_start), (char *)template_for_hook,
-          copy_size);
-  // copy the original target code to trampoline
-  char *copy_start = (char *)code_start
-                     + ((char *)template_for_hook2 - (char *)template_for_hook)
-                     - max_tempoline_insert_space;
-
-  int code_len = reinterpret_cast<intptr_t> (context->machine_defined);
-  memcpy (copy_start, context->code_point, code_len);
-  context->called_callback = called_callback;
-  context->return_callback = return_callback;
-  const char *function_name = context->function_name;
-  const void **modify_pointer
-      = static_cast<const void **> (context->trampoline_code_start);
-  int modified_code_len
-      = reinterpret_cast<intptr_t> (context->machine_defined);
-  modify_pointer[-4] = function_name;
-  modify_pointer[-3] = (void *)called_callback;
-  modify_pointer[-2]
-      = reinterpret_cast<void *> (target_code_point + modified_code_len);
-  modify_pointer[-1] = (void *)return_callback;
-  // At here the code mem has been modified completely.
-  // But x86 does not need to flush.
-  return true;
-}
-
 mem_modify_instr *
 x64_target_client::modify_code (code_context *context)
 {
@@ -265,8 +146,62 @@ x64_target_client::modify_code (code_context *context)
   intptr_t jump_dist
       = reinterpret_cast<intptr_t> (context->trampoline_code_start)
         - reinterpret_cast<intptr_t> (target_code_point
-                                      + byte_needed_to_modify);
+                                      + byte_needed_to_modify());
   int jump_dist_int = static_cast<int> (jump_dist);
   memcpy (&modify_intr_pointer[1], &jump_dist_int, sizeof (int));
   return instr;
+}
+
+extern "C" {
+extern void template_for_hook (void);
+extern void template_for_hook2 (void);
+extern void template_for_hook_end (void);
+}
+
+  int x64_target_client::byte_needed_to_modify ()
+{
+  return 5;
+}
+  disassembler *x64_target_client::new_disassembler ()
+{
+  return new disasm::Disassembler();
+}
+dis_client *x64_target_client::new_code_check_client()
+{
+  return new x64_dis_client();
+}
+dis_client *x64_target_client::new_backedge_check_client(intptr_t base, intptr_t hookend)
+{
+  return new x64_test_back_egde_client(base, hookend);
+}
+char * x64_target_client::template_start()
+{
+  return (char *)template_for_hook;
+}
+char * x64_target_client::template_ret_start()
+{
+  return (char *)template_for_hook2;
+}
+char * x64_target_client::template_end()
+{
+  return (char *)template_for_hook_end;
+}
+int x64_target_client::max_tempoline_insert_space ()
+{
+  return 16;
+}
+bool x64_target_client::check_jump_dist (intptr_t target_code_point, intptr_t trampoline_code_start)
+{
+  intptr_t jump_dist =trampoline_code_start 
+                       - (target_code_point + byte_needed_to_modify());
+  // FIXME: need to delete code mem before returns
+  if (jump_dist < 0 && jump_dist < max_negative_jump)
+    return false;
+  if (jump_dist > 0 && jump_dist > max_positive_jump)
+    return false;
+  return true;
+}
+void x64_target_client::flush_code (void *, int )
+{
+  // x64 does not need this.
 }
