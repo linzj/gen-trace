@@ -1,4 +1,6 @@
 .PHONY: all test
+GNU_STL_PATH=$(NDK_PATH)/sources/cxx-stl/gnu-libstdc++/libs/armeabi-v7a/
+GNU_STL:=-lgnustl_static
 all:libtrace.so
 TESTS := mem_modify_test \
 code_manager_impl_test \
@@ -27,8 +29,10 @@ MAIN_TEST_OBJS :=  \
 				  base_controller_test_lib.o \
 
 ARM_MAIN_OBJS := \
+				 arm/hook_template.o
 
 ARM_TEST_OBJS := \
+				 arm/hook_template_test.o
 
 
 OBJS := $(MAIN_OBJS) \
@@ -42,7 +46,7 @@ OBJS := $(MAIN_OBJS) \
 CFLAGS := -O0 -g -Wall -I. -fPIC -fvisibility=hidden
 
 LDFLAGS := -pie
-LDLIBS := -lpthread -lrt
+LDLIBS := -L$(GNU_STL_PATH) $(GNU_STL)
 CC=arm-linux-androideabi-gcc
 CXX=arm-linux-androideabi-gcc
 
@@ -61,22 +65,22 @@ CXX=arm-linux-androideabi-gcc
 	$(CXX) -MM $(CFLAGS) $*.S > $*.d
 
 mem_modify_test: mem_modify_test.o log.o mem_modify.o
-	$(CXX) $(LDFLAGS) -o $@ $^
+	$(CXX) $(LDFLAGS) -o $@ $^ $(LDLIBS)
 
 code_manager_impl_test: code_manager_impl.o log.o code_manager_impl_test.o
-	$(CXX) $(LDFLAGS) -o $@ $^
+	$(CXX) $(LDFLAGS) -o $@ $^ $(LDLIBS)
 
 code_modify_test: code_modify_test.o log.o code_manager_impl.o code_modify.o mem_modify.o
-	$(CXX) $(LDFLAGS) -o $@ $^
+	$(CXX) $(LDFLAGS) -o $@ $^ $(LDLIBS)
 
 config_reader_test: config_reader.o config_reader_test.o log.o
-	$(CXX) $(LDFLAGS) -o $@ $^
+	$(CXX) $(LDFLAGS) -o $@ $^ $(LDLIBS)
 
 #dis_x64_test: x64/dis.o x64/dis_test.o x64/dis_gnu.o log.o disassembler.o dis_client.o
 #	$(CXX) $(LDFLAGS) -o $@ $^
 #
-#hook_template_test: x64/hook_template_test.o x64/hook_template.o log.o
-#	$(CXX) $(LDFLAGS) -o $@ $^
+hook_template_test: arm/hook_template_test.o arm/hook_template.o log.o
+	$(CXX) $(LDFLAGS) -o $@ $^ $(LDLIBS)
 #x64_target_client_test: x64/hook_template.o x64/dis.o x64/dis_gnu.o x64/x64_target_client.o x64/x64_target_client_test.o code_manager_impl.o log.o code_modify.o mem_modify.o disassembler.o dis_client.o base_target_client.o
 #	$(CXX) $(LDFLAGS) -o $@ $^
 

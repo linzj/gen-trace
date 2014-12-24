@@ -1,7 +1,11 @@
 #include "code_manager_impl.h"
 #include <assert.h>
 #include <sys/mman.h>
+#ifndef __ANDROID__
 #include <sys/user.h>
+#else
+#include <asm/user.h>
+#endif // __ANDROID__
 #include <stdint.h>
 #include <memory>
 
