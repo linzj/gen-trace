@@ -14,9 +14,9 @@ private:
   virtual dis_client *new_code_check_client ();
   virtual dis_client *new_backedge_check_client (intptr_t base,
                                                  intptr_t hookend);
-  virtual char *template_start ();
+  virtual char *template_start (intptr_t target_code_point);
   virtual char *template_ret_start (intptr_t target_code_point);
-  virtual char *template_end ();
+  virtual char *template_end (intptr_t target_code_point);
   virtual int max_tempoline_insert_space ();
   virtual bool check_jump_dist (intptr_t target_code_point,
                                 intptr_t trampoline_code_start);

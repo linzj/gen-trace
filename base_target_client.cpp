@@ -1,5 +1,6 @@
 #include <memory>
 #include <memory.h>
+#include <string.h>
 #include "base_target_client.h"
 #include "disassembler.h"
 #include "dis_client.h"
@@ -71,9 +72,9 @@ base_target_client::build_trampoline (code_manager *m, code_context *context,
 {
   const intptr_t target_code_point
       = reinterpret_cast<intptr_t> (context->code_point);
-  char *const _template_start = template_start ();
+  char *const _template_start = template_start (target_code_point);
   char *const _template_ret_start = template_ret_start (target_code_point);
-  char *const _template_end = template_end ();
+  char *const _template_end = template_end (target_code_point);
   const int template_code_size = (char *)_template_end
                                  - (char *)_template_start;
   const int template_size = template_code_size + sizeof (intptr_t) * 4;

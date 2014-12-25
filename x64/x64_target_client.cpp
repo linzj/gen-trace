@@ -183,8 +183,7 @@ x64_target_client::new_backedge_check_client (intptr_t base, intptr_t hookend)
   return new x64_test_back_egde_client (base, hookend);
 }
 
-char *
-x64_target_client::template_start ()
+char *x64_target_client::template_start (intptr_t)
 {
   return (char *)template_for_hook;
 }
@@ -194,8 +193,7 @@ char *x64_target_client::template_ret_start (intptr_t)
   return (char *)template_for_hook2;
 }
 
-char *
-x64_target_client::template_end ()
+char *x64_target_client::template_end (intptr_t)
 {
   return (char *)template_for_hook_end;
 }

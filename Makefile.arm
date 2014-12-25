@@ -8,7 +8,8 @@ code_modify_test \
 config_reader_test \
 hook_template_test \
 hook_template_test_arm \
-dis_arm_test
+dis_arm_test \
+arm_target_client_test
 
 test: $(TESTS)
 MAIN_OBJS := log.o \
@@ -36,12 +37,14 @@ ARM_MAIN_OBJS := \
 				 arm/hook_template_arm.o \
 				 arm/flush_code.o \
 				 arm/dis_gnu.o \
-				 arm/dis.o
+				 arm/dis.o \
+				 arm/arm_target_client.o
 
 ARM_TEST_OBJS := \
 				 arm/hook_template_test.o \
 				 arm/dis_test.o \
-				 arm/hook_template_test_arm.o
+				 arm/hook_template_test_arm.o \
+				 arm/arm_target_client_test.o
 
 
 OBJS := $(MAIN_OBJS) \
@@ -97,8 +100,9 @@ hook_template_test: arm/hook_template_test.o arm/hook_template_thumb.o arm/flush
 
 hook_template_test_arm: arm/hook_template_test_arm.o arm/hook_template_arm.o arm/flush_code.o log.o
 	$(CXX) $(LDFLAGS) -o $@ $^ $(LDLIBS)
-#x64_target_client_test: x64/hook_template.o x64/dis.o x64/dis_gnu.o x64/x64_target_client.o x64/x64_target_client_test.o code_manager_impl.o log.o code_modify.o mem_modify.o disassembler.o dis_client.o base_target_client.o
-#	$(CXX) $(LDFLAGS) -o $@ $^
+
+arm_target_client_test: arm/hook_template_arm.o arm/hook_template_thumb.o arm/dis.o arm/dis_gnu.o arm/arm_target_client.o arm/arm_target_client_test.o code_manager_impl.o log.o code_modify.o mem_modify.o disassembler.o dis_client.o base_target_client.o
+	$(CXX) $(LDFLAGS) -o $@ $^ $(LDLIBS)
 
 #base_controller_test: config_reader.o  base_controller.o code_manager_impl.o log.o code_modify.o mem_modify.o x64/hook_template.o x64/dis.o x64/dis_gnu.o x64/x64_target_client.o base_controller_test.o libbase_controller_test_lib.so disassembler.o dis_client.o base_target_client.o
 #	$(CXX) $(LDFLAGS) -Wl,-rpath,. -o $@ $(filter %.o, $^) -L. -lbase_controller_test_lib

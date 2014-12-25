@@ -1,7 +1,20 @@
+#include <string.h>
+#include <stdlib.h>
+#include "mem_modify.h"
 #include "arm_target_client.h"
 #include "dis.h"
+#include "dis_client.h"
 #include "flush_code.h"
 
+extern "C" {
+extern void template_for_hook_thumb (void);
+extern void template_for_hook_thumb_end (void);
+extern void template_for_hook_thumb_ret (void);
+
+extern void template_for_hook_arm (void);
+extern void template_for_hook_arm_end (void);
+extern void template_for_hook_arm_ret (void);
+}
 // that is what bw.w does
 static intptr_t thumb_max_positive_jump = 16777214;
 static intptr_t thumb_max_negative_jump = -16777216;
@@ -141,7 +154,7 @@ arm_target_client::new_code_check_client ()
 dis_client *
 arm_target_client::new_backedge_check_client (intptr_t base, intptr_t hookend)
 {
-  return new arm_test_back_egde_client ();
+  return new arm_test_back_egde_client (base, hookend);
 }
 
 extern "C" {
@@ -152,11 +165,18 @@ extern void template_for_hook_end (void);
 }
 
 char *
-arm_target_client::template_start ()
+arm_target_client::template_start (intptr_t target_code_point)
 {
-  intptr_t r = (intptr_t)template_for_hook;
-  r & = (intptr_t)~1;
-  return (char *)r;
+  if (target_code_point & 1)
+    {
+      intptr_t r = (intptr_t)template_for_hook_thumb;
+      r &= static_cast<intptr_t> (~1);
+      return (char *)r;
+    }
+  else
+    {
+      return (char *)template_for_hook_arm;
+    }
 }
 
 char *
@@ -171,16 +191,23 @@ arm_target_client::template_ret_start (intptr_t target_code_point)
     {
       r = (intptr_t)template_for_hook_arm_ret;
     }
-  r &= (intptr_t)~1;
+  r &= static_cast<intptr_t> (~1);
   return (char *)r;
 }
 
 char *
-arm_target_client::template_end ()
+arm_target_client::template_end (intptr_t target_code_point)
 {
-  intptr_t r = (intptr_t)template_for_hook_end;
-  r & = (intptr_t)~1;
-  return (char *)r;
+  if (target_code_point & 1)
+    {
+      intptr_t r = (intptr_t)template_for_hook_thumb_end;
+      r &= static_cast<intptr_t> (~1);
+      return (char *)r;
+    }
+  else
+    {
+      return (char *)template_for_hook_arm_end;
+    }
 }
 
 int
@@ -193,9 +220,9 @@ bool
 arm_target_client::check_jump_dist (intptr_t target_code_point,
                                     intptr_t trampoline_code_start)
 {
-  intptr_t jump_dist
-      = trampoline_code_start
-        - ((target_code_point & (intptr_t)~1) + byte_needed_to_modify ());
+  intptr_t jump_dist = trampoline_code_start
+                       - ((target_code_point & static_cast<intptr_t> (~1))
+                          + byte_needed_to_modify ());
   intptr_t max_positive_jump = target_code_point & 1 ? thumb_max_positive_jump
                                                      : arm_max_positive_jump;
   intptr_t max_negative_jump = target_code_point & 1 ? thumb_max_negative_jump
@@ -216,15 +243,54 @@ arm_target_client::flush_code (void *code_start, int len)
 }
 
 mem_modify_instr *
-arm_target_client::modify_code (code_context *)
+arm_target_client::modify_code (code_context *context)
 {
   const intptr_t target_code_point
       = reinterpret_cast<intptr_t> (context->code_point);
-  target_code_point &= (intptr_t)~1;
   int code_len = reinterpret_cast<intptr_t> (context->machine_defined);
   mem_modify_instr *instr = static_cast<mem_modify_instr *> (
       malloc (sizeof (mem_modify_instr) + code_len - 1));
-  instr->where = (void *)target_code_point;
+  instr->where = (void *)(target_code_point & static_cast<intptr_t> (~1));
   instr->size = code_len;
-  char *modify_intr_pointer = reinterpret_cast<*> (&instr->data[0]);
+  intptr_t trampoline_code_start
+      = reinterpret_cast<intptr_t> (context->trampoline_code_start);
+  intptr_t jump_dist = trampoline_code_start
+                       - ((target_code_point & static_cast<intptr_t> (~1))
+                          + byte_needed_to_modify ());
+  if (target_code_point & 1)
+    {
+      // thumb mode
+      uint16_t *modify_intr_pointer
+          = reinterpret_cast<uint16_t *> (&instr->data[0]);
+      uint16_t imm10 = 0x3ff000 & jump_dist;
+      uint16_t imm11 = 0xfff & jump_dist;
+      uint16_t j2 = 0x400000 & jump_dist;
+      uint16_t j1 = 0x800000 & jump_dist;
+      int S = jump_dist < 0;
+      S <<= 10;
+
+      uint16_t first = static_cast<uint16_t> (30)
+                       << static_cast<uint16_t> (11);
+      first |= S;
+      first |= imm10;
+      uint16_t second = imm11;
+      second |= static_cast<uint16_t> (j2) << static_cast<uint16_t> (11);
+      second |= static_cast<uint16_t> (1) << static_cast<uint16_t> (12);
+      second |= static_cast<uint16_t> (j1) << static_cast<uint16_t> (13);
+      second |= static_cast<uint16_t> (1) << static_cast<uint16_t> (15);
+      modify_intr_pointer[0] = first;
+      modify_intr_pointer[1] = second;
+    }
+  else
+    {
+      uint32_t *modify_intr_pointer
+          = reinterpret_cast<uint32_t *> (&instr->data[0]);
+      uint32_t whatever = 0xa;
+      uint32_t code = whatever << 24;
+      uint32_t cond = 0xe; // always
+      code |= cond << 28;
+      code |= (jump_dist & 0xffffff);
+      modify_intr_pointer[0] = code;
+    }
+  return instr;
 }
