@@ -13,14 +13,15 @@
 #include "flush_code.h"
 
 extern "C" {
-extern void template_for_hook (void);
 #ifdef __thumb__
+extern void template_for_hook_thumb (void);
+extern void template_for_hook_thumb_end (void);
 extern void template_for_hook_thumb_ret (void);
 #else
+extern void template_for_hook_arm (void);
+extern void template_for_hook_arm_end (void);
 extern void template_for_hook_arm_ret (void);
-
 #endif
-extern void template_for_hook_end (void);
 }
 
 static void *g_original_ret;
@@ -74,8 +75,12 @@ main ()
   modify_pointer[3] = reinterpret_cast<void *> (ret_hook);
 #ifdef __thumb__
   char *template_for_hook2 = (char *)template_for_hook_thumb_ret;
+  char *template_for_hook_end = (char *)template_for_hook_thumb_end;
+  char *template_for_hook = (char *)template_for_hook_thumb;
 #else
   char *template_for_hook2 = (char *)template_for_hook_arm_ret;
+  char *template_for_hook_end = (char *)template_for_hook_arm_end;
+  char *template_for_hook = (char *)template_for_hook_arm;
 #endif
   static const int template_size2 = (char *)template_for_hook_end
                                     - (char *)template_for_hook2;

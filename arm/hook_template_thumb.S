@@ -2,11 +2,11 @@
 .syntax unified
 .arch armv7-a
 .align  2
-.global template_for_hook
-.hidden template_for_hook
+.global template_for_hook_thumb
+.hidden template_for_hook_thumb
 .thumb
 .thumb_func
-.type	template_for_hook, %function
+.type	template_for_hook_thumb, %function
 .Lname:
   .space 4
 .Lhook_function:
@@ -15,11 +15,10 @@
   .space 4
 .Lret_jump:
   .space 4
-template_for_hook:
+template_for_hook_thumb:
  #14 * 4, 8 byte aligned
   push.w {r0-r12, lr}
 # save lr to r0
-  # minus 7 to ensure we are thumb mode.
   mov.w r1, .Lret - .Lload_ret - 4
   add r1, #1
 .Lload_ret:
@@ -29,16 +28,7 @@ template_for_hook:
   ldr r1, .Lname
   ldr ip, .Lhook_function
   blx ip
-  # determine the target code is arm or thum.
-  ldr ip, .Ljump_back
-  tst ip, #1
-  ittt eq
-  moveq ip, .Larm_switch - .Lload_arm_switch - 4
-.Lload_arm_switch:
-  addeq ip, pc
-  bxeq ip
   pop.w {r0-r12, lr}
-.Lorigin_code:
   nop
   nop
   nop
@@ -49,25 +39,11 @@ template_for_hook:
   nop
 .global template_for_hook_thumb_ret
 .hidden template_for_hook_thumb_ret
-.thumb
 .thumb_func
 .type	template_for_hook_thumb_ret, %function
 template_for_hook_thumb_ret:
-  ldr pc, .Ljump_back 
+  ldr pc, .Ljump_back
   nop
-.Larm_switch:
-  .arm
-  pop {r0-r12, lr}
-  nop
-  nop
-  nop
-  nop
-.global template_for_hook_arm_ret
-.hidden template_for_hook_arm_ret
-.type	template_for_hook_arm_ret, %function
-template_for_hook_arm_ret:
-  ldr pc, .Ljump_back 
-.thumb
 .Lret:
   push {r0-r3}
   ldr ip, .Lret_jump
@@ -75,7 +51,7 @@ template_for_hook_arm_ret:
   mov ip, r0
   pop {r0-r3}
   bx ip
-.global template_for_hook_end
-.hidden template_for_hook_end
-.type template_for_hook_end, %function
-template_for_hook_end:
+.global template_for_hook_thumb_end
+.hidden template_for_hook_thumb_end
+.type template_for_hook_thumb_end, %function
+template_for_hook_thumb_end:
