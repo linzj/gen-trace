@@ -38,16 +38,31 @@ config_reader::handle_line (const char *str)
   bool to_return = true;
   switch (state_)
     {
-    case READ_MODULE_NAME:
-      module_name_.assign (str);
-      rtrim (module_name_);
-      size_for_config_ += module_name_.size () + 1;
-      state_ = READ_WHERE_LOG;
-      break;
     case READ_WHERE_LOG:
       where_to_log_.assign (str);
       rtrim (where_to_log_);
       size_for_config_ += where_to_log_.size () + 1;
+      state_ = READ_SLEEP_SEC;
+      break;
+    case READ_SLEEP_SEC:
+      {
+        long int sleep_sec;
+        sleep_sec = strtol (str, NULL, 10);
+        if (errno != 0)
+          {
+            LOGE ("strtol fails %s for %s, line %d\n", strerror (errno), str,
+                  __LINE__);
+            to_return = false;
+            break;
+          }
+        sleep_sec_ = sleep_sec;
+        state_ = READ_MODULE_NAME;
+      }
+      break;
+    case READ_MODULE_NAME:
+      module_name_.assign (str);
+      rtrim (module_name_);
+      size_for_config_ += module_name_.size () + 1;
       state_ = READ_SYM_BASE;
       break;
     case READ_SYM_BASE:
@@ -98,7 +113,7 @@ config_reader::handle_line (const char *str)
 }
 
 config_reader::config_reader ()
-    : state_ (READ_MODULE_NAME), size_for_config_ (sizeof (config_desc))
+    : state_ (READ_WHERE_LOG), size_for_config_ (sizeof (config_desc))
 {
 }
 
@@ -152,6 +167,7 @@ config_reader::accumulate ()
       allocator.alloc (sizeof (code_modify_desc) * slot_array_.size ()));
   ret->module_name = module_name;
   ret->where_to_keep_log = where_to_keep_log;
+  ret->sleep_sec = sleep_sec_;
   ret->desc_array = desc_array;
   ret->desc_array_size = slot_array_.size ();
   // work out desc_array

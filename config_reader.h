@@ -9,6 +9,7 @@ struct config_desc
 {
   char *module_name;
   char *where_to_keep_log;
+  int sleep_sec;
   code_modify_desc *desc_array;
   int desc_array_size;
 };
@@ -18,8 +19,9 @@ class config_reader
 public:
   enum State
   {
-    READ_MODULE_NAME,
     READ_WHERE_LOG,
+    READ_SLEEP_SEC,
+    READ_MODULE_NAME,
     READ_SYM_BASE,
     READ_SYM_SIZE,
     READ_SYM_NAME,
@@ -32,6 +34,7 @@ private:
   State state_;
   std::string module_name_;
   std::string where_to_log_;
+  int sleep_sec_;
 
   struct read_slot
   {

@@ -55,6 +55,11 @@ base_controller::do_it ()
 void
 base_controller::do_rest_with_config (config_desc *config_desc)
 {
+  if (config_desc->sleep_sec != 0)
+    {
+      timespec spec = { config_desc->sleep_sec, 0 };
+      nanosleep (&spec, NULL);
+    }
   intptr_t base = find_base (config_desc);
   if (base == 0)
     {

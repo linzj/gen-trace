@@ -3,7 +3,7 @@
 #include <stdlib.h>
 
 static const char *test_lines[] = {
-  "cc1\n", "here\n", "0000000000eed1e0\n", "78\n",
+  "here\n", "0\n", "cc1\n", "0000000000eed1e0\n", "78\n",
   "gen_lroundxfhi2(rtx_def*, rtx_def*)\n", "0000000000ac0ee0\n", "94\n",
   "debug_av_set(_list_node*)\n", "00000000009da940\n", "337\n",
   "lto_input_tree_ref(lto_input_block*, data_in*, function*, LTO_tags)\n",

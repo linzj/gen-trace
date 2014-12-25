@@ -3,6 +3,7 @@
 #include "log.h"
 #include <fstream>
 #include <string>
+#include <pthread.h>
 
 extern "C" {
 extern void __start_ctrace__ (void *original_ret, const char *name);
@@ -69,16 +70,25 @@ file_controller::file_controller (pfn_called_callback f1, pfn_ret_callback f2)
     : base_controller (f1, f2)
 {
 }
-class Init
+class init
 {
 public:
-  Init ();
+  init ();
+  static void *init_worker (void *);
 };
 file_controller *g_controller;
-Init::Init ()
+init::init ()
+{
+  pthread_t worker;
+  pthread_create (&worker, NULL, init_worker, NULL);
+  pthread_detach (worker);
+}
+void *
+init::init_worker (void *)
 {
   g_controller = new file_controller (__start_ctrace__, __end_ctrace__);
   g_controller->do_it ();
+  return NULL;
 }
-static Init __g__init__;
+static init __g__init__ __attribute__ ((unused));
 }
