@@ -92,8 +92,10 @@ code_modify (const code_modify_desc *code_points, int count_of,
 bool
 code_modify_init (target_client *client)
 {
-  g_client = client;
-  g_code_manager = new code_manager_impl ();
+  if (g_client == NULL)
+    g_client = client;
+  if (g_code_manager == NULL)
+    g_code_manager = new code_manager_impl ();
   return g_client != NULL && g_code_manager != NULL;
 }
 

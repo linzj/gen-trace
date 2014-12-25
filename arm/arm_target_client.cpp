@@ -306,9 +306,6 @@ arm_target_client::modify_code (code_context *context)
       second |= static_cast<uint16_t> (1) << static_cast<uint16_t> (15);
       modify_intr_pointer[0] = first;
       modify_intr_pointer[1] = second;
-      LOGI ("jump_dist: %ld, S: %d, j1: %u, j2: %u, imm10: %u, imm11: %u\n",
-            jump_dist << 1, S, j1, j2, imm10, imm11);
-      LOGI ("first = %04x, second = %04x\n", first, second);
     }
   else
     {

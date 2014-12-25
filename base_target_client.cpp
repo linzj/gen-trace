@@ -4,6 +4,7 @@
 #include "base_target_client.h"
 #include "disassembler.h"
 #include "dis_client.h"
+#include "log.h"
 
 bool
 base_target_client::check_for_back_edge (disassembler *dis, char *start,

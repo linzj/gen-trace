@@ -2,6 +2,7 @@
 #include <string.h>
 #include <assert.h>
 #include <unistd.h>
+#include <errno.h>
 #include <dlfcn.h>
 #include "code_modify.h"
 #include "base_controller.h"
@@ -16,6 +17,26 @@ static const char *test_lines[] = {
 static const char *test_lines[] = {
   "libbase_controller_test_lib.so\n", "here\n", "00000359\n", "348\n",
   "original_function\n",
+};
+static const char *test_lines2[] = {
+  "libbase_controller_test_lib_arm.so\n", "here\n", "00000358\n", "564\n",
+  "original_function\n",
+};
+
+class test_fp_line_client_arm : public fp_line_client
+{
+public:
+  test_fp_line_client_arm () : now_ (0) {}
+
+private:
+  virtual const char *
+  next_line ()
+  {
+    if (now_ == sizeof (test_lines2) / sizeof (test_lines2[0]))
+      return NULL;
+    return test_lines2[now_++];
+  }
+  int now_;
 };
 #endif
 
@@ -35,6 +56,7 @@ private:
   int now_;
 };
 
+template <class line_client>
 class test_base_controller : public base_controller
 {
 public:
@@ -48,7 +70,7 @@ private:
   virtual fp_line_client *
   open_line_client ()
   {
-    return new test_fp_line_client ();
+    return new line_client ();
   }
   virtual void
   destroy_line_client (fp_line_client *c)
@@ -93,9 +115,29 @@ main ()
                                          int f, int g);
   pfn_original_function original_function
       = (pfn_original_function)dlsym (handle, "original_function");
-  test_base_controller controller (hook, ret_hook);
+  test_base_controller<test_fp_line_client> controller (hook, ret_hook);
   controller.do_it ();
   const char *ret = original_function (0, 1, 2, 3, 4, 5, 6);
   assert (strcmp (ret, "nimabi") == 0);
+#ifdef __arm__
+  {
+    void *handle = dlopen ("./libbase_controller_test_lib_arm.so", RTLD_NOW);
+    if (handle == NULL)
+      {
+        LOGE ("fails to open libbase_controller_test_lib %s\n", dlerror ());
+        return 1;
+      }
+    typedef char *(*pfn_original_function)(int a, int b, int c, int d, int e,
+                                           int f, int g);
+    pfn_original_function original_function
+        = (pfn_original_function)dlsym (handle, "original_function");
+    LOGI ("checkout function %p\n", original_function);
+    test_base_controller<test_fp_line_client_arm> controller (hook, ret_hook);
+    errno = 0;
+    controller.do_it ();
+    const char *ret = original_function (0, 1, 2, 3, 4, 5, 6);
+    assert (strcmp (ret, "nimabi") == 0);
+  }
+#endif
   return 0;
 }

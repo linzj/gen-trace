@@ -108,7 +108,14 @@ arm_target_client_test: arm/hook_template_arm.o arm/hook_template_thumb.o arm/di
 libbase_controller_test_lib.so: base_controller_test_lib.o log.o
 	$(CXX) -shared -o $@ $^ $(LDLIBS)
 
-base_controller_test: config_reader.o  base_controller.o code_manager_impl.o log.o code_modify.o mem_modify.o arm/flush_code.o arm/hook_template_arm.o arm/hook_template_thumb.o  arm/dis.o arm/dis_gnu.o arm/arm_target_client.o base_controller_test.o libbase_controller_test_lib.so disassembler.o dis_client.o base_target_client.o
+base_controller_test_lib_arm.o: base_controller_test_lib.cpp
+	$(CC) $(CFLAGS) -marm -c $^ -o $*.o
+	$(CC) -MM $(CFLAGS) $^ > $*.d
+
+libbase_controller_test_lib_arm.so: base_controller_test_lib_arm.o log.o
+	$(CXX) -shared -o $@ $^ $(LDLIBS)
+
+base_controller_test: config_reader.o  base_controller.o code_manager_impl.o log.o code_modify.o mem_modify.o arm/flush_code.o arm/hook_template_arm.o arm/hook_template_thumb.o  arm/dis.o arm/dis_gnu.o arm/arm_target_client.o base_controller_test.o libbase_controller_test_lib.so libbase_controller_test_lib_arm.so disassembler.o dis_client.o base_target_client.o
 	$(CXX) $(LDFLAGS) -o $@ $(filter %.o, $^) $(LDLIBS)
 
 clean:
