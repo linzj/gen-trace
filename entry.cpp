@@ -52,7 +52,12 @@ private:
 fp_line_client *
 file_controller::open_line_client ()
 {
-  return new my_fp_line_client ("./trace.config");
+#ifndef __ANDROID__
+#define TRACE_FILE "./trace.config"
+#else
+#define TRACE_FILE "/sdcard/trace.config"
+#endif
+  return new my_fp_line_client (TRACE_FILE);
 }
 
 void
