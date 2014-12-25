@@ -1,4 +1,5 @@
 .PHONY: all test
+NDK_PATH_SYSROOT=$(NDK_PATH)/platforms/android-14/arch-arm
 GNU_STL_PATH=$(NDK_PATH)/sources/cxx-stl/gnu-libstdc++/libs/armeabi-v7a/
 GNU_STL:=-lgnustl_static
 all:libtrace.so
@@ -56,7 +57,7 @@ OBJS := $(MAIN_OBJS) \
 		\
 		$(X64_TEST_OBJS)
 
-CFLAGS := -O0 -g3 -gdwarf-4 -Wall -I. -fPIC -fvisibility=hidden -mthumb -march=armv7-a
+CFLAGS := -O0 -g3 -gdwarf-4 -Wall -I. -fPIC -fvisibility=hidden -mthumb -march=armv7-a --sysroot=$(NDK_PATH_SYSROOT)
 
 LDFLAGS := -pie
 LDLIBS := -L$(GNU_STL_PATH) $(GNU_STL)
@@ -124,4 +125,4 @@ test_all: $(TESTS)
 	$(foreach test, $^, $(info ./$(test)))
 
 libtrace.so: $(MAIN_OBJS) $(ARM_MAIN_OBJS)
-	g++ $(LDFLAGS) -Wl,--no-undefined -shared -o $@ $^ $(LDLIBS)
+	$(CXX) $(LDFLAGS) -Wl,--no-undefined -shared -o $@ $^ $(LDLIBS)
