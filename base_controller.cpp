@@ -9,6 +9,8 @@
 #include <errno.h>
 #include <string>
 #include <unistd.h>
+#include <pthread.h>
+#include <assert.h>
 
 // machine base
 #ifdef __x86_64__
@@ -29,10 +31,17 @@ typedef struct
 fp_line_client::~fp_line_client () {}
 base_controller::base_controller (pfn_called_callback called_callback,
                                   pfn_ret_callback return_callback)
-    : called_callback_ (called_callback), return_callback_ (return_callback)
+    : called_callback_ (called_callback), return_callback_ (return_callback),
+      config_desc_ (NULL), ref_count_ (1)
 {
 }
-base_controller::~base_controller () {}
+base_controller::~base_controller ()
+{
+  if (config_desc_)
+    {
+      free (config_desc_);
+    }
+}
 
 void
 base_controller::do_it ()
@@ -48,18 +57,24 @@ base_controller::do_it ()
     {
       return;
     }
-  do_rest_with_config (config_desc);
-  free (config_desc);
+  if (config_desc->sleep_sec != 0)
+    {
+      pthread_t mythread;
+      config_desc_ = config_desc;
+      retain ();
+      pthread_create (&mythread, NULL, thread_worker, this);
+      pthread_detach (mythread);
+    }
+  else
+    {
+      do_rest_with_config (config_desc);
+      free (config_desc);
+    }
 }
 
 void
 base_controller::do_rest_with_config (config_desc *config_desc)
 {
-  if (config_desc->sleep_sec != 0)
-    {
-      timespec spec = { config_desc->sleep_sec, 0 };
-      nanosleep (&spec, NULL);
-    }
   intptr_t base = find_base (config_desc);
   if (base == 0)
     {
@@ -162,4 +177,32 @@ base_controller::is_base_elf (intptr_t base)
       return false;
     }
   return true;
+}
+
+void *
+base_controller::thread_worker (void *self)
+{
+  base_controller *_self = static_cast<base_controller *> (self);
+  config_desc *config_desc = _self->config_desc_;
+  timespec spec = { config_desc->sleep_sec, 0 };
+  nanosleep (&spec, NULL);
+  _self->do_rest_with_config (config_desc);
+  _self->detain ();
+  return NULL;
+}
+
+void
+base_controller::retain ()
+{
+  int ref_count = __sync_fetch_and_add (&ref_count_, 1);
+  assert (ref_count > 0);
+}
+
+void
+base_controller::detain ()
+{
+  if (__sync_add_and_fetch (&ref_count_, -1) == 0)
+    {
+      delete this;
+    }
 }

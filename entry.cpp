@@ -3,7 +3,6 @@
 #include "log.h"
 #include <fstream>
 #include <string>
-#include <pthread.h>
 
 extern "C" {
 extern void __start_ctrace__ (void *original_ret, const char *name);
@@ -77,17 +76,13 @@ public:
   static void *init_worker (void *);
 };
 file_controller *g_controller;
-init::init ()
-{
-  pthread_t worker;
-  pthread_create (&worker, NULL, init_worker, NULL);
-  pthread_detach (worker);
-}
+init::init () { init_worker (NULL); }
 void *
 init::init_worker (void *)
 {
   g_controller = new file_controller (__start_ctrace__, __end_ctrace__);
   g_controller->do_it ();
+  g_controller->detain ();
   return NULL;
 }
 static init __g__init__ __attribute__ ((unused));
