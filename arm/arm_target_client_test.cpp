@@ -31,9 +31,9 @@ main ()
     arm_target_client arm_target_client;
     target_client *target_client = &arm_target_client;
     code_context *cc;
-    assert (target_client::check_code_okay
-            == target_client->check_code (code, "test", sizeof (code),
-                                          &code_manager, &cc));
+    target_client::check_code_status c = target_client->check_code (
+        code, "test", sizeof (code), &code_manager, &cc);
+    assert (target_client::check_code_okay == c);
     assert (cc->code_point == &code[0]);
     assert (target_client->build_trampoline (
         &code_manager, cc, (pfn_called_callback)main, (pfn_ret_callback)main));

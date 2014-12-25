@@ -5,6 +5,7 @@
 #include "dis.h"
 #include "dis_client.h"
 #include "flush_code.h"
+#include "log.h"
 
 extern "C" {
 extern void template_for_hook_thumb (void);
@@ -53,12 +54,14 @@ arm_dis_client::on_instr (const char *dis_str)
     const char *instr_name;
     int size;
   } check_list[] = { { "mov", 3 },
-                     { "add", 3 },
-                     { "sub", 3 },
-                     { "div", 3 },
                      { "push", 4 },
                      { "pop", 3 },
+                     { "ldr", 3 },
+                     { "str", 3 },
+                     { "add", 3 },
+                     { "sub", 3 },
                      { "mul", 3 },
+                     { "div", 3 },
                      { "xor", 3 },
                      { "or", 2 },
                      { "and", 3 },
@@ -239,7 +242,7 @@ arm_target_client::check_jump_dist (intptr_t target_code_point,
 void
 arm_target_client::flush_code (void *code_start, int len)
 {
-  flush_code (code_start, len);
+  ::flush_code (code_start, len);
 }
 
 mem_modify_instr *
