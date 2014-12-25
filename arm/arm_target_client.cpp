@@ -311,6 +311,7 @@ arm_target_client::modify_code (code_context *context)
     {
       uint32_t *modify_intr_pointer
           = reinterpret_cast<uint32_t *> (&instr->data[0]);
+      jump_dist -= 4;
       jump_dist >>= 2;
       uint32_t whatever = 0xa;
       uint32_t code = whatever << 24;
