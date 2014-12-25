@@ -6197,7 +6197,6 @@ static unsigned int regname_selected = 1;
 
 
 
-static bfd_boolean force_thumb = 0;
 
 
 
@@ -8929,27 +8928,6 @@ print_insn_thumb32 (bfd_vma pc, struct disassemble_info *info, long given)
 
 
 
-static void
-print_insn_data (bfd_vma pc __attribute__ ((__unused__)),
-   struct disassemble_info *info,
-   long given)
-{
-  switch (info->bytes_per_chunk)
-    {
-    case 1:
-      info->fprintf_func (info->stream, ".byte\t0x%02lx", given);
-      break;
-    case 2:
-      info->fprintf_func (info->stream, ".short\t0x%04lx", given);
-      break;
-    case 4:
-      info->fprintf_func (info->stream, ".word\t0x%08lx", given);
-      break;
-    default:
-      abort ();
-    }
-}
-
 
 
 
@@ -9103,8 +9081,6 @@ print_insn (bfd_vma pc, struct disassemble_info *info, bfd_boolean little)
   int little_code;
   unsigned int size = 4;
   void (*printer) (bfd_vma, struct disassemble_info *, long);
-  bfd_boolean found = 0;
-  struct arm_private_data *private_data;
 
 
 
@@ -9124,7 +9100,6 @@ print_insn (bfd_vma pc, struct disassemble_info *info, bfd_boolean little)
       info->private_data = & private;
     }
 
-  private_data = info->private_data;
 
 
 

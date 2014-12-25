@@ -7,6 +7,7 @@ code_manager_impl_test \
 code_modify_test \
 config_reader_test \
 hook_template_test \
+hook_template_test_arm \
 dis_arm_test
 
 test: $(TESTS)
@@ -38,7 +39,8 @@ ARM_MAIN_OBJS := \
 
 ARM_TEST_OBJS := \
 				 arm/hook_template_test.o \
-				 arm/dis_test.o
+				 arm/dis_test.o \
+				 arm/hook_template_test_arm.o
 
 
 OBJS := $(MAIN_OBJS) \
@@ -70,6 +72,10 @@ CXX=arm-linux-androideabi-gcc
 	$(CXX) $(CFLAGS) -c $*.S -o $*.o
 	$(CXX) -MM $(CFLAGS) $*.S > $*.d
 
+arm/hook_template_test_arm.o: arm/hook_template_test.cpp
+	$(CC) $(CFLAGS) -marm -c $^ -o $*.o
+	$(CC) -MM $(CFLAGS) $^ > $*.d
+
 mem_modify_test: mem_modify_test.o log.o mem_modify.o
 	$(CXX) $(LDFLAGS) -o $@ $^ $(LDLIBS)
 
@@ -86,6 +92,9 @@ dis_arm_test: arm/dis.o arm/dis_test.o arm/dis_gnu.o log.o disassembler.o dis_cl
 	$(CXX) $(LDFLAGS) -o $@ $^ $(LDLIBS)
 
 hook_template_test: arm/hook_template_test.o arm/hook_template.o arm/flush_code.o log.o
+	$(CXX) $(LDFLAGS) -o $@ $^ $(LDLIBS)
+
+hook_template_test_arm: arm/hook_template_test_arm.o arm/hook_template.o arm/flush_code.o log.o
 	$(CXX) $(LDFLAGS) -o $@ $^ $(LDLIBS)
 #x64_target_client_test: x64/hook_template.o x64/dis.o x64/dis_gnu.o x64/x64_target_client.o x64/x64_target_client_test.o code_manager_impl.o log.o code_modify.o mem_modify.o disassembler.o dis_client.o base_target_client.o
 #	$(CXX) $(LDFLAGS) -o $@ $^
