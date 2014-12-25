@@ -69,8 +69,10 @@ base_target_client::build_trampoline (code_manager *m, code_context *context,
                                       pfn_called_callback called_callback,
                                       pfn_ret_callback return_callback)
 {
+  const intptr_t target_code_point
+      = reinterpret_cast<intptr_t> (context->code_point);
   char *const _template_start = template_start ();
-  char *const _template_ret_start = template_ret_start ();
+  char *const _template_ret_start = template_ret_start (target_code_point);
   char *const _template_end = template_end ();
   const int template_code_size = (char *)_template_end
                                  - (char *)_template_start;
@@ -83,8 +85,6 @@ base_target_client::build_trampoline (code_manager *m, code_context *context,
   // check if we can jump to our code.
   intptr_t code_mem_int = reinterpret_cast<intptr_t> (code_mem);
   intptr_t code_start = code_mem_int + sizeof (intptr_t) * 4;
-  const intptr_t target_code_point
-      = reinterpret_cast<intptr_t> (context->code_point);
   // FIXME: need to delete code mem before returns
   if (!check_jump_dist (target_code_point, code_start))
     return false;

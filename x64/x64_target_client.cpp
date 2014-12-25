@@ -121,6 +121,7 @@ void
 x64_test_back_egde_client::on_instr (const char *)
 {
 }
+
 void
 x64_test_back_egde_client::on_addr (intptr_t ref)
 {
@@ -163,54 +164,61 @@ x64_target_client::byte_needed_to_modify ()
 {
   return 5;
 }
+
 disassembler *
 x64_target_client::new_disassembler ()
 {
   return new disasm::Disassembler ();
 }
+
 dis_client *
 x64_target_client::new_code_check_client ()
 {
   return new x64_dis_client ();
 }
+
 dis_client *
 x64_target_client::new_backedge_check_client (intptr_t base, intptr_t hookend)
 {
   return new x64_test_back_egde_client (base, hookend);
 }
+
 char *
 x64_target_client::template_start ()
 {
   return (char *)template_for_hook;
 }
-char *
-x64_target_client::template_ret_start ()
+
+char *x64_target_client::template_ret_start (intptr_t)
 {
   return (char *)template_for_hook2;
 }
+
 char *
 x64_target_client::template_end ()
 {
   return (char *)template_for_hook_end;
 }
+
 int
 x64_target_client::max_tempoline_insert_space ()
 {
   return 16;
 }
+
 bool
 x64_target_client::check_jump_dist (intptr_t target_code_point,
                                     intptr_t trampoline_code_start)
 {
   intptr_t jump_dist = trampoline_code_start
                        - (target_code_point + byte_needed_to_modify ());
-  // FIXME: need to delete code mem before returns
   if (jump_dist < 0 && jump_dist < max_negative_jump)
     return false;
   if (jump_dist > 0 && jump_dist > max_positive_jump)
     return false;
   return true;
 }
+
 void
 x64_target_client::flush_code (void *, int)
 {

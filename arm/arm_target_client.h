@@ -1,12 +1,12 @@
-#ifndef X64_TARGET_CLIENT_H
-#define X64_TARGET_CLIENT_H
+#ifndef ARM_TARGET_CLIENT_H
+#define ARM_TARGET_CLIENT_H
 #include "base_target_client.h"
 
-class x64_target_client : public base_target_client
+class arm_target_client : public base_target_client
 {
 public:
-  x64_target_client ();
-  ~x64_target_client ();
+  arm_target_client ();
+  ~arm_target_client ();
 
 private:
   virtual int byte_needed_to_modify ();
@@ -24,4 +24,4 @@ private:
   virtual mem_modify_instr *modify_code (code_context *);
 };
 
-#endif /* X64_TARGET_CLIENT_H */
+#endif /* ARM_TARGET_CLIENT_H */

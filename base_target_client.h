@@ -22,7 +22,7 @@ protected:
   virtual dis_client *new_backedge_check_client (intptr_t base,
                                                  intptr_t hookend) = 0;
   virtual char *template_start () = 0;
-  virtual char *template_ret_start () = 0;
+  virtual char *template_ret_start (intptr_t target_code_point) = 0;
   virtual char *template_end () = 0;
   virtual int max_tempoline_insert_space () = 0;
   virtual bool check_jump_dist (intptr_t target_code_point,
