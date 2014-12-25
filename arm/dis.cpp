@@ -80,6 +80,7 @@ Disassembler::DisassemblerImpl::DisassemblerImpl ()
   info_.read_memory_func = read_memory;
   info_.memory_error_func = memory_error;
   info_.print_address_func = print_address;
+  info_.private_data = 0;
 }
 }
 extern "C" {

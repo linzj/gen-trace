@@ -28,6 +28,8 @@ protected:
   virtual bool check_jump_dist (intptr_t target_code_point,
                                 intptr_t trampoline_code_start) = 0;
   virtual void flush_code (void *code_start, int len) = 0;
+  virtual void copy_original_code (void *trampoline_code_start,
+                                   void *target_code_point, int len) = 0;
 
 private:
   bool check_for_back_edge (disassembler *, char *start, char *hook_end,

@@ -91,7 +91,7 @@ libbase_controller_test_lib.so: base_controller_test_lib.o log.o
 	g++ -shared -o $@ $^
 
 base_controller_test: config_reader.o  base_controller.o code_manager_impl.o log.o code_modify.o mem_modify.o x64/hook_template.o x64/dis.o x64/dis_gnu.o x64/x64_target_client.o base_controller_test.o libbase_controller_test_lib.so disassembler.o dis_client.o base_target_client.o
-	g++ $(LDFLAGS) -Wl,-rpath,. -o $@ $(filter %.o, $^) -L. -lbase_controller_test_lib
+	g++ $(LDFLAGS) -o $@ $(filter %.o, $^)
 
 clean:
 	rm *.o *.d **/*.o **/*.d

@@ -2,14 +2,22 @@
 #include <string.h>
 #include <assert.h>
 #include <unistd.h>
+#include <dlfcn.h>
 #include "code_modify.h"
 #include "base_controller.h"
 #include "log.h"
 
+#if defined(__x86_64__)
 static const char *test_lines[] = {
-  "libbase_controller_test_lib.so\n", "here\n", "00000000000007e0\n",
-  "000000000000015d\n", "original_function\n",
+  "libbase_controller_test_lib.so\n", "here\n", "00000000000007e0\n", "349\n",
+  "original_function\n",
 };
+#elif defined(__arm__)
+static const char *test_lines[] = {
+  "libbase_controller_test_lib.so\n", "here\n", "00000359\n", "348\n",
+  "original_function\n",
+};
+#endif
 
 class test_fp_line_client : public fp_line_client
 {
@@ -75,6 +83,16 @@ const char *original_function (int a, int b, int c, int d, int e, int f,
 int
 main ()
 {
+  void *handle = dlopen ("./libbase_controller_test_lib.so", RTLD_NOW);
+  if (handle == NULL)
+    {
+      LOGE ("fails to open libbase_controller_test_lib %s\n", dlerror ());
+      return 1;
+    }
+  typedef char *(*pfn_original_function)(int a, int b, int c, int d, int e,
+                                         int f, int g);
+  pfn_original_function original_function
+      = (pfn_original_function)dlsym (handle, "original_function");
   test_base_controller controller (hook, ret_hook);
   controller.do_it ();
   const char *ret = original_function (0, 1, 2, 3, 4, 5, 6);

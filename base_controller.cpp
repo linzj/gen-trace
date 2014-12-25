@@ -13,6 +13,10 @@
 // machine base
 #ifdef __x86_64__
 #include "x64/x64_target_client.h"
+#elif defined(__arm__)
+#include "arm/arm_target_client.h"
+#else
+#error not supported machine
 #endif
 
 typedef struct
@@ -107,10 +111,10 @@ base_controller::find_base (config_desc *config_desc)
     {
       return 0;
     }
-  long int l = strtol (str, NULL, 16);
+  unsigned long int l = strtoul (str, NULL, 16);
   if (errno != 0)
     {
-      LOGE ("strtol fails %s\n", strerror (errno));
+      LOGE ("strtol fails %s for %s\n", strerror (errno), str);
       return 0;
     }
   return is_base_elf (l) ? l : 0;
@@ -130,6 +134,8 @@ base_controller::do_modify (config_desc *config_desc)
 {
 #ifdef __x86_64__
   target_client *_target_client = new x64_target_client;
+#elif defined(__arm__)
+  target_client *_target_client = new arm_target_client;
 #endif
   code_modify_init (_target_client);
   code_modify_set_log_for_fail (config_desc->where_to_keep_log);

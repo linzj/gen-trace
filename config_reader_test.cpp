@@ -3,28 +3,31 @@
 #include <stdlib.h>
 
 static const char *test_lines[] = {
-  "cc1\n", "\n", "00000000005d5030\n", "00000000000000b2\n",
-  "find_attribute_namespace(char const*)\n", "00000000005644f0\n",
-  "0000000000000015\n",
-  "lookup_attribute(char const*, tree_node*) [clone .part.0]\n",
-  "00000000005d50f0\n", "0000000000000250\n",
-  "lookup_scoped_attribute_spec(tree_node const*, tree_node const*)\n",
-  "00000000005d5440\n", "000000000000026a\n",
-  "register_scoped_attribute(attribute_spec const*, scoped_attributes*)\n",
-  "00000000005d5be0\n", "000000000000032f\n",
-  "init_attributes() [clone .part.17]\n", "00000000005d74c0\n",
-  "000000000000007e\n", "c_write_global_declarations_2(tree_node*)\n",
-  "00000000005d7540\n", "00000000000000ca\n", "locate_old_decl(tree_node*)\n",
-  "00000000005d7610\n", "00000000000000f8\n",
-  "warn_about_goto(unsigned int, tree_node*, tree_node*)\n",
-  "00000000005d7710\n", "0000000000000046\n",
-  "layout_array_type(tree_node*)\n", "00000000005d7760\n",
-  "0000000000000107\n",
-  "make_label(unsigned int, tree_node*, bool, c_label_vars**)\n",
-  "00000000005d7870\n", "00000000000000f4\n",
-  "warn_defaults_to(unsigned int, int, char const*, ...)\n",
-  "00000000005d7970\n", "00000000000000f3\n",
-  "collect_all_refs(char const*)\n",
+  "cc1\n", "here\n", "0000000000eed1e0\n", "78\n",
+  "gen_lroundxfhi2(rtx_def*, rtx_def*)\n", "0000000000ac0ee0\n", "94\n",
+  "debug_av_set(_list_node*)\n", "00000000009da940\n", "337\n",
+  "lto_input_tree_ref(lto_input_block*, data_in*, function*, LTO_tags)\n",
+  "00000000010c2850\n", "48\n", "double_int::neg_with_overflow(bool*) const\n",
+  "00000000011d4280\n", "79\n", "fcache::fcache()\n", "0000000001253d80\n",
+  "26\n", "std::money_get<wchar_t, std::istreambuf_iterator<wchar_t, "
+          "std::char_traits<wchar_t> > >::money_get(unsigned long)\n",
+  "00000000007584c0\n", "718\n", "convert_to_fixed(tree_node*, tree_node*)\n",
+  "0000000000d620c0\n", "665\n", "expr_align(tree_node const*)\n",
+  "0000000000d59410\n", "63\n",
+  "bool wi::lts_p<generic_wide_int<fixed_wide_int_storage<384> >, "
+  "generic_wide_int<fixed_wide_int_storage<384> > "
+  ">(generic_wide_int<fixed_wide_int_storage<384> > const&, "
+  "generic_wide_int<fixed_wide_int_storage<384> > const&)\n",
+  "00000000010ca400\n", "124\n",
+  "single_def_use_dom_walker::after_dom_children(basic_block_def*)\n",
+  "0000000001250170\n", "255\n",
+  "long std::__copy_streambufs_eof<wchar_t, std::char_traits<wchar_t> "
+  ">(std::basic_streambuf<wchar_t, std::char_traits<wchar_t> >*, "
+  "std::basic_streambuf<wchar_t, std::char_traits<wchar_t> >*, bool&)\n",
+  "0000000000748460\n", "113\n",
+  "compute_call_stmt_bb_frequency(tree_node*, basic_block_def*)\n",
+  "0000000001160aa0\n", "623\n", "remove_from_deps(deps_desc*, rtx_insn*)\n",
+  "0000000000cbeba0\n", "204\n",
 };
 
 int

@@ -102,7 +102,7 @@ base_target_client::build_trampoline (code_manager *m, code_context *context,
                      - max_tempoline_insert_space ();
 
   int code_len = reinterpret_cast<intptr_t> (context->machine_defined);
-  memcpy (copy_start, context->code_point, code_len);
+  copy_original_code (copy_start, context->code_point, code_len);
   context->called_callback = called_callback;
   context->return_callback = return_callback;
   const char *function_name = context->function_name;

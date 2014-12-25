@@ -1,4 +1,5 @@
 #include "config_reader.h"
+#include "log.h"
 #include <errno.h>
 #include <stdlib.h>
 #include <string.h>
@@ -55,6 +56,8 @@ config_reader::handle_line (const char *str)
         sym_base = strtol (str, NULL, 16);
         if (errno != 0)
           {
+            LOGE ("strtol fails %s for %s, line %d\n", strerror (errno), str,
+                  __LINE__);
             to_return = false;
             break;
           }
@@ -65,9 +68,11 @@ config_reader::handle_line (const char *str)
     case READ_SYM_SIZE:
       {
         long int sym_size;
-        sym_size = strtol (str, NULL, 16);
+        sym_size = strtol (str, NULL, 10);
         if (errno != 0)
           {
+            LOGE ("strtol fails %s for %s, line %d\n", strerror (errno), str,
+                  __LINE__);
             to_return = false;
             break;
           }

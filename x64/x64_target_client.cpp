@@ -222,3 +222,10 @@ x64_target_client::flush_code (void *, int)
 {
   // x64 does not need this.
 }
+
+void
+x64_target_client::copy_original_code (void *trampoline_code_start,
+                                       void *target_code_point, int len)
+{
+  memcpy (trampoline_code_start, target_code_point, code_len);
+}

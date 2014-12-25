@@ -223,6 +223,7 @@ bool
 arm_target_client::check_jump_dist (intptr_t target_code_point,
                                     intptr_t trampoline_code_start)
 {
+  bool thumb = (target_code_point & 1) != 0;
   intptr_t jump_dist = trampoline_code_start
                        - ((target_code_point & static_cast<intptr_t> (~1))
                           + byte_needed_to_modify ());
@@ -236,6 +237,20 @@ arm_target_client::check_jump_dist (intptr_t target_code_point,
     return false;
   if (jump_dist & 1)
     return false;
+  if (thumb)
+    {
+      if (jump_dist & 1)
+        {
+          return false;
+        }
+    }
+  else
+    {
+      if (jump_dist & 3)
+        {
+          return false;
+        }
+    }
   return true;
 }
 
@@ -265,11 +280,19 @@ arm_target_client::modify_code (code_context *context)
       // thumb mode
       uint16_t *modify_intr_pointer
           = reinterpret_cast<uint16_t *> (&instr->data[0]);
-      uint16_t imm10 = 0x3ff000 & jump_dist;
-      uint16_t imm11 = 0xfff & jump_dist;
-      uint16_t j2 = 0x400000 & jump_dist;
-      uint16_t j1 = 0x800000 & jump_dist;
+      jump_dist >>= 1;
+      uint16_t imm10 = static_cast<uint16_t> (
+          (static_cast<uint32_t> (0x1ff800)
+           & static_cast<uint32_t> (jump_dist)) >> static_cast<uint32_t> (11));
+      uint16_t imm11 = static_cast<uint32_t> (0x7ff)
+                       & static_cast<uint32_t> (jump_dist);
+      uint16_t i2 = static_cast<uint32_t> (0x200000)
+                    & static_cast<uint32_t> (jump_dist);
+      uint16_t i1 = static_cast<uint32_t> (0x400000)
+                    & static_cast<uint32_t> (jump_dist);
       int S = jump_dist < 0;
+      uint16_t j2 = ((!i2) ^ S) & 1;
+      uint16_t j1 = ((!i1) ^ S) & 1;
       S <<= 10;
 
       uint16_t first = static_cast<uint16_t> (30)
@@ -283,11 +306,15 @@ arm_target_client::modify_code (code_context *context)
       second |= static_cast<uint16_t> (1) << static_cast<uint16_t> (15);
       modify_intr_pointer[0] = first;
       modify_intr_pointer[1] = second;
+      LOGI ("jump_dist: %ld, S: %d, j1: %u, j2: %u, imm10: %u, imm11: %u\n",
+            jump_dist << 1, S, j1, j2, imm10, imm11);
+      LOGI ("first = %04x, second = %04x\n", first, second);
     }
   else
     {
       uint32_t *modify_intr_pointer
           = reinterpret_cast<uint32_t *> (&instr->data[0]);
+      jump_dist >>= 2;
       uint32_t whatever = 0xa;
       uint32_t code = whatever << 24;
       uint32_t cond = 0xe; // always
@@ -296,4 +323,15 @@ arm_target_client::modify_code (code_context *context)
       modify_intr_pointer[0] = code;
     }
   return instr;
+}
+
+void
+arm_target_client::copy_original_code (void *trampoline_code_start,
+                                       void *target_code_point, int len)
+{
+  intptr_t target_code_point_i
+      = reinterpret_cast<intptr_t> (target_code_point);
+  target_code_point_i &= static_cast<intptr_t> (~1);
+  memcpy (trampoline_code_start,
+          reinterpret_cast<void *> (target_code_point_i), len);
 }

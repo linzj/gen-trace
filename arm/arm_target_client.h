@@ -21,6 +21,8 @@ private:
   virtual bool check_jump_dist (intptr_t target_code_point,
                                 intptr_t trampoline_code_start);
   virtual void flush_code (void *code_start, int len);
+  virtual void copy_original_code (void *trampoline_code_start,
+                                   void *target_code_point, int len);
   virtual mem_modify_instr *modify_code (code_context *);
 };
 
