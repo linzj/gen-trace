@@ -5,12 +5,112 @@
 #include "code_modify.h"
 #include "code_manager_impl.h"
 #include "mem_modify.h"
+#include "log.h"
+#include <time.h>
 
 target_client::~target_client () {}
 
+class perf_target_client;
 static target_client *g_client;
 static code_manager *g_code_manager;
 static const char *g_log_for_fail;
+static perf_target_client *g_perf_target_client;
+
+class perf_target_client : public target_client
+{
+public:
+  perf_target_client ();
+  inline void
+  set_client (target_client *client)
+  {
+    real_ = client;
+  }
+
+private:
+  virtual check_code_status check_code (void *, const char *, int code_size,
+                                        code_manager *, code_context **);
+  virtual build_trampoline_status
+  build_trampoline (code_manager *, code_context *,
+                    pfn_called_callback called_callback,
+                    pfn_ret_callback return_callback);
+  virtual mem_modify_instr *modify_code (code_context *);
+  void check_env ();
+
+  uint64_t env_;
+  uint64_t check_code_;
+  uint64_t build_trampoline_;
+  uint64_t modify_code_;
+  target_client *real_;
+};
+
+perf_target_client::perf_target_client ()
+    : env_ (0), check_code_ (0), build_trampoline_ (0), modify_code_ (0),
+      real_ (NULL)
+{
+}
+
+target_client::check_code_status
+perf_target_client::check_code (void *p1, const char *p2, int p3,
+                                code_manager *p4, code_context **p5)
+{
+  timespec t1, t2;
+  clock_gettime (CLOCK_MONOTONIC, &t1);
+  check_code_status status = real_->check_code (p1, p2, p3, p4, p5);
+  clock_gettime (CLOCK_MONOTONIC, &t2);
+  uint64_t elapse = (t2.tv_sec - t1.tv_sec) * 1e9 + (t2.tv_nsec - t2.tv_nsec);
+  elapse /= 1000;
+  env_ += elapse;
+  check_code_ += elapse;
+  check_env ();
+  return status;
+}
+
+target_client::build_trampoline_status
+perf_target_client::build_trampoline (code_manager *p1, code_context *p2,
+                                      pfn_called_callback p3,
+                                      pfn_ret_callback p4)
+{
+  timespec t1, t2;
+  clock_gettime (CLOCK_MONOTONIC, &t1);
+  build_trampoline_status status = real_->build_trampoline (p1, p2, p3, p4);
+  clock_gettime (CLOCK_MONOTONIC, &t2);
+  uint64_t elapse = (t2.tv_sec - t1.tv_sec) * 1e9 + (t2.tv_nsec - t2.tv_nsec);
+  elapse /= 1000;
+  env_ += elapse;
+  build_trampoline_ += elapse;
+  check_env ();
+  return status;
+}
+
+mem_modify_instr *
+perf_target_client::modify_code (code_context *p1)
+{
+  timespec t1, t2;
+  clock_gettime (CLOCK_MONOTONIC, &t1);
+  mem_modify_instr *ret = real_->modify_code (p1);
+  clock_gettime (CLOCK_MONOTONIC, &t2);
+  uint64_t elapse = (t2.tv_sec - t1.tv_sec) * 1e9 + (t2.tv_nsec - t2.tv_nsec);
+  elapse /= 1000;
+  env_ += elapse;
+  modify_code_ += elapse;
+  check_env ();
+  return ret;
+}
+
+void
+perf_target_client::check_env ()
+{
+  if (env_ > 1e6)
+    {
+      LOGI ("env_ = %ld, check_code_ = %ld, build_trampoline_ = %ld, "
+            "modify_code = %ld\n",
+            env_, check_code_, build_trampoline_, modify_code_);
+      env_ = 0;
+      check_code_ = 0;
+      build_trampoline_ = 0;
+      modify_code_ = 0;
+    }
+}
 
 int
 code_modify (const code_modify_desc *code_points, int count_of,
@@ -99,6 +199,8 @@ code_modify_init (target_client *client)
     g_client = client;
   if (g_code_manager == NULL)
     g_code_manager = new code_manager_impl ();
+  if (g_perf_target_client == NULL)
+    g_perf_target_client = new perf_target_client ();
   return g_client != NULL && g_code_manager != NULL;
 }
 
