@@ -17,10 +17,8 @@ extern void template_for_hook_arm_end (void);
 extern void template_for_hook_arm_ret (void);
 }
 
-static const int arm_byte_needed_to_modify = 4;
+static const int arm_byte_needed_to_modify = 12;
 static const int thumb_byte_needed_to_modify = 10;
-static const intptr_t arm_max_positive_jump = 33554428;
-static const intptr_t arm_max_negative_jump = -33554432;
 
 class arm_dis_client : public dis_client
 {
@@ -229,38 +227,6 @@ bool
 arm_target_client::check_jump_dist (intptr_t target_code_point,
                                     intptr_t trampoline_code_start)
 {
-  bool thumb = (target_code_point & 1) != 0;
-  if (thumb)
-    {
-      // thumb use movt, mov, bx
-      // long jump.
-      return true;
-    }
-  intptr_t jump_dist = trampoline_code_start
-                       - ((target_code_point & static_cast<intptr_t> (~1))
-                          + arm_byte_needed_to_modify);
-  intptr_t max_positive_jump = arm_max_positive_jump;
-  intptr_t max_negative_jump = arm_max_negative_jump;
-  if (jump_dist < 0 && jump_dist < max_negative_jump)
-    {
-      LOGE ("jump is negative and less than max_negative_jump\n");
-      return false;
-    }
-  if (jump_dist > 0 && jump_dist > max_positive_jump)
-    {
-      LOGE ("jump is positive and less than max_positive_jump\n");
-      return false;
-    }
-  if (jump_dist & 1)
-    {
-      LOGE ("jump to a odd address\n");
-      return false;
-    }
-  if (jump_dist & 3)
-    {
-      LOGE ("arm::jump to a odd address\n");
-      return false;
-    }
   return true;
 }
 
@@ -282,13 +248,13 @@ arm_target_client::modify_code (code_context *context)
   instr->size = code_len;
   intptr_t trampoline_code_start
       = reinterpret_cast<intptr_t> (context->trampoline_code_start);
+  const uint16_t ip = 12;
   if (target_code_point & 1)
     {
       // thumb mode
       uint16_t *modify_intr_pointer
           = reinterpret_cast<uint16_t *> (&instr->data[0]);
       uint16_t first, second, third, forth, fifth;
-      const uint16_t ip = 12;
       uint16_t lower_imm16 = (trampoline_code_start & 0xffff);
       uint16_t higher_imm16
           = static_cast<uintptr_t> (trampoline_code_start & 0xffff0000) >> 16;
@@ -334,19 +300,43 @@ arm_target_client::modify_code (code_context *context)
     }
   else
     {
-      intptr_t jump_dist
-          = trampoline_code_start
-            - ((target_code_point & static_cast<intptr_t> (~1)));
       uint32_t *modify_intr_pointer
           = reinterpret_cast<uint32_t *> (&instr->data[0]);
-      jump_dist -= 8;
-      jump_dist >>= 2;
-      uint32_t whatever = 0xa;
-      uint32_t code = whatever << 24;
+      // use movw ,movt as above.
+      uint32_t first, second, third;
       uint32_t cond = 0xe; // always
-      code |= cond << 28;
-      code |= (jump_dist & 0xffffff);
-      modify_intr_pointer[0] = code;
+      uint32_t lower_imm16 = (trampoline_code_start & 0xffff);
+      uint32_t higher_imm16
+          = static_cast<uintptr_t> (trampoline_code_start & 0xffff0000) >> 16;
+      {
+        uint32_t imm4 = (lower_imm16 & 0xf000) >> 12;
+        uint32_t imm12 = 0xfff & lower_imm16;
+        first = cond << 28;
+        first |= 0x30 << 20;
+        first |= imm4 << 16;
+        first |= ip << 12;
+        first |= imm12;
+        first |= 1;
+      }
+      {
+        uint32_t imm4 = (higher_imm16 & 0xf000) >> 12;
+        uint32_t imm12 = 0xfff & higher_imm16;
+        second = cond << 28;
+        second |= 0x34 << 20;
+        second |= imm4 << 16;
+        second |= ip << 12;
+        second |= imm12;
+      }
+
+      {
+        third = cond << 28;
+        third |= 0x12fff1 << 4;
+        third |= ip;
+      }
+
+      modify_intr_pointer[0] = first;
+      modify_intr_pointer[1] = second;
+      modify_intr_pointer[2] = third;
     }
   return instr;
 }
