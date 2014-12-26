@@ -60,7 +60,7 @@ OBJS := $(MAIN_OBJS) \
 CFLAGS := -O0 -g3 -gdwarf-4 -Wall -I. -fPIC -fvisibility=hidden -mthumb -march=armv7-a --sysroot=$(NDK_PATH_SYSROOT)
 
 LDFLAGS := -pie
-LDLIBS := -L$(GNU_STL_PATH) $(GNU_STL)
+LDLIBS := -L$(GNU_STL_PATH) $(GNU_STL) -llog
 CC=arm-linux-androideabi-gcc
 CXX=arm-linux-androideabi-gcc
 

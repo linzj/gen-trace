@@ -78,6 +78,7 @@ base_controller::do_rest_with_config (config_desc *config_desc)
   intptr_t base = find_base (config_desc);
   if (base == 0)
     {
+      LOGE ("base_controller::do_rest_with_config base equals to zero.\n");
       return;
     }
   if (should_add_base_to_sym_base (base))
@@ -128,6 +129,8 @@ base_controller::find_base (config_desc *config_desc)
   char *str;
   std::string search_for_module (config_desc->module_name);
   search_for_module.insert (0, "/");
+  LOGI ("base_controller::find_base search for module: %s\n",
+        search_for_module.c_str ());
   while ((str = fgets (buf, 512, fp)) != NULL)
     {
       if (strstr (str, search_for_module.c_str ()))
@@ -140,6 +143,8 @@ base_controller::find_base (config_desc *config_desc)
     {
       return 0;
     }
+  // work around the stupid C implementation of android.
+  errno = 0;
   unsigned long int l = strtoul (str, NULL, 16);
   if (errno != 0)
     {
@@ -166,6 +171,7 @@ base_controller::do_modify (config_desc *config_desc)
 #elif defined(__arm__)
   target_client *_target_client = new arm_target_client;
 #endif
+  LOGI ("base_controller::do_modify begin\n");
   code_modify_init (_target_client);
   code_modify_set_log_for_fail (config_desc->where_to_keep_log);
   int code_modified_count
@@ -193,8 +199,10 @@ base_controller::thread_worker (void *self)
 {
   base_controller *_self = static_cast<base_controller *> (self);
   config_desc *config_desc = _self->config_desc_;
+  LOGI ("base_controller::thread_worker, begin to sleep.\n");
   timespec spec = { config_desc->sleep_sec, 0 };
   nanosleep (&spec, NULL);
+  LOGI ("base_controller::thread_worker, end sleep.\n");
   _self->do_rest_with_config (config_desc);
   _self->detain ();
   return NULL;
