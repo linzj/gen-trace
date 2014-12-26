@@ -19,7 +19,8 @@ MAIN_OBJS := log.o \
 		entry.o \
 		base_target_client.o \
 		dis_client.o \
-		disassembler.o
+		disassembler.o \
+		StopWorld_linux.o \
 
 MAIN_TEST_OBJS :=  \
 				  mem_modify_test.o \
@@ -90,7 +91,7 @@ config_reader_test: config_reader.o config_reader_test.o log.o
 libbase_controller_test_lib.so: base_controller_test_lib.o log.o
 	g++ -shared -o $@ $^
 
-base_controller_test: config_reader.o  base_controller.o code_manager_impl.o log.o code_modify.o mem_modify.o x64/hook_template.o x64/dis.o x64/dis_gnu.o x64/x64_target_client.o base_controller_test.o libbase_controller_test_lib.so disassembler.o dis_client.o base_target_client.o
+base_controller_test: config_reader.o  base_controller.o code_manager_impl.o log.o code_modify.o mem_modify.o x64/hook_template.o x64/dis.o x64/dis_gnu.o x64/x64_target_client.o base_controller_test.o libbase_controller_test_lib.so disassembler.o dis_client.o base_target_client.o StopWorld_linux.o
 	g++ $(LDFLAGS) -o $@ $(filter %.o, $^) $(LDLIBS) -ldl
 
 clean:
