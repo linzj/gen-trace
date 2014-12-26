@@ -110,7 +110,10 @@ restartTheWorld (void)
 {
   sigaction (47, &oldAction, NULL);
   pthread_mutex_lock (&mutex);
-  pthread_cond_broadcast (&cond);
+  for (int i = 0; i < 64; ++i)
+    {
+      pthread_cond_signal (&cond);
+    }
   pthread_mutex_unlock (&mutex);
 }
 

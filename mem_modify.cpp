@@ -12,23 +12,77 @@
 #include <assert.h>
 #include <stdint.h>
 #include <string.h>
+#include <stdlib.h>
+#include <stdio.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <dirent.h>
+#include <fcntl.h>
+
+static bool
+stop_conti_the_world (int pid, bool stop)
+{
+  char buf[256];
+  snprintf (buf, 256, "/proc/%d/task", pid);
+  int fd = open (buf, O_RDONLY | O_DIRECTORY);
+  if (fd == -1)
+    {
+      return false;
+    }
+  struct dirent _DIR_buff[15];
+  while (true)
+    {
+      int ret = getdents (fd, _DIR_buff, sizeof (_DIR_buff));
+      if (ret <= 0)
+        {
+          return true;
+        }
+      struct dirent *iterator = _DIR_buff;
+      while (ret)
+        {
+          ret -= iterator->d_reclen;
+          struct dirent *cur = iterator;
+          iterator = reinterpret_cast<struct dirent *> (
+              reinterpret_cast<char *> (iterator) + cur->d_reclen);
+          if (!strcmp (cur->d_name, ".") || !strcmp (cur->d_name, ".."))
+            {
+              continue;
+            }
+          int cur_pid = static_cast<int> (strtoul (cur->d_name, NULL, 10));
+          int ptraceret;
+          if (stop)
+            {
+              int status;
+              ptraceret = ptrace (PTRACE_ATTACH, cur_pid, 0, 0);
+
+              if (ptraceret == -1)
+                {
+                  LOGE ("ptrace attach fails %s\n", strerror (errno));
+                  return false;
+                }
+              waitpid (cur_pid, &status, __WALL);
+            }
+          else
+            {
+              ptraceret = ptrace (PTRACE_DETACH, cur_pid, 0, 0);
+              if (ptraceret == -1)
+                {
+                  LOGE ("ptrace detach fails %s\n", strerror (errno));
+                  return false;
+                }
+            }
+        }
+    }
+  return false;
+}
 
 static int
 modify (const struct mem_modify_instr **instr, int count_of_instr)
 {
-  int ptraceret;
-  int status;
   int count = 0;
 
   pid_t target_pid = getppid ();
-  ptraceret = ptrace (PTRACE_ATTACH, target_pid, 0, 0);
-  if (ptraceret == -1)
-    {
-      LOGE ("ptrace attach fails %s\n", strerror (errno));
-      return 0;
-    }
-
-  waitpid (target_pid, &status, __WALL);
+  stop_conti_the_world (target_pid, true);
   for (int i = 0; i < count_of_instr; ++i)
     {
       int count_for_long = instr[i]->size / sizeof (long);
@@ -74,7 +128,7 @@ modify (const struct mem_modify_instr **instr, int count_of_instr)
         }
       count++;
     }
-  ptrace (PTRACE_DETACH, target_pid, 0, 0);
+  stop_conti_the_world (target_pid, false);
   return count;
 }
 
