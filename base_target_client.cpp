@@ -80,7 +80,16 @@ base_target_client::build_trampoline (code_manager *m, code_context *context,
   const int template_code_size = (char *)_template_end
                                  - (char *)_template_start;
   const int template_size = template_code_size + sizeof (intptr_t) * 4;
-  void *code_mem = m->new_code_mem (context->code_point, template_size);
+  void *hint;
+  if (use_target_code_point_as_hint ())
+    {
+      hint = context->code_point;
+    }
+  else
+    {
+      hint = NULL;
+    }
+  void *code_mem = m->new_code_mem (hint, template_size);
   if (!code_mem)
     {
       return build_trampoline_memory;
@@ -118,4 +127,10 @@ base_target_client::build_trampoline (code_manager *m, code_context *context,
   modify_pointer[-1] = (void *)return_callback;
   flush_code (code_mem, template_size);
   return build_trampoline_okay;
+}
+
+bool
+base_target_client::use_target_code_point_as_hint (void)
+{
+  return true;
 }

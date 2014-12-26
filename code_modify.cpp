@@ -1,3 +1,4 @@
+#define __STDC_FORMAT_MACROS
 #include <vector>
 #include <stdlib.h>
 #include <stdio.h>
@@ -7,6 +8,9 @@
 #include "mem_modify.h"
 #include "log.h"
 #include <time.h>
+#include <stdint.h>
+#include <inttypes.h>
+#define USE_PERF 1
 
 target_client::~target_client () {}
 
@@ -102,8 +106,9 @@ perf_target_client::check_env ()
 {
   if (env_ > 1e6)
     {
-      LOGI ("env_ = %ld, check_code_ = %ld, build_trampoline_ = %ld, "
-            "modify_code = %ld\n",
+      LOGI ("env_ = %" PRIu64 ", check_code_ = %" PRIu64
+            ", build_trampoline_ = %" PRIu64 ", "
+            "modify_code = %" PRIu64 "\n",
             env_, check_code_, build_trampoline_, modify_code_);
       env_ = 0;
       check_code_ = 0;
@@ -201,6 +206,13 @@ code_modify_init (target_client *client)
     g_code_manager = new code_manager_impl ();
   if (g_perf_target_client == NULL)
     g_perf_target_client = new perf_target_client ();
+#ifdef USE_PERF
+  if (g_client != g_perf_target_client)
+    {
+      g_perf_target_client->set_client (g_client);
+      g_client = g_perf_target_client;
+    }
+#endif
   return g_client != NULL && g_code_manager != NULL;
 }
 

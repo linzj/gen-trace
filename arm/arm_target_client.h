@@ -24,6 +24,7 @@ private:
   virtual void copy_original_code (void *trampoline_code_start,
                                    void *target_code_point, int len);
   virtual mem_modify_instr *modify_code (code_context *);
+  virtual bool use_target_code_point_as_hint (void);
 };
 
 #endif /* ARM_TARGET_CLIENT_H */

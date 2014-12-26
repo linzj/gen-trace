@@ -31,6 +31,10 @@ protected:
   virtual void flush_code (void *code_start, int len) = 0;
   virtual void copy_original_code (void *trampoline_code_start,
                                    void *target_code_point, int len) = 0;
+  // This predication show if this machine will use near jump, aka, jump
+  // using pc, and need target code point as hint.
+  // Default implementation will return true.
+  virtual bool use_target_code_point_as_hint (void);
 
 private:
   bool check_for_back_edge (disassembler *, char *start, char *hook_end,

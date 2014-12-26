@@ -351,3 +351,9 @@ arm_target_client::copy_original_code (void *trampoline_code_start,
   memcpy (trampoline_code_start,
           reinterpret_cast<void *> (target_code_point_i), len);
 }
+
+bool
+arm_target_client::use_target_code_point_as_hint (void)
+{
+  return false;
+}
