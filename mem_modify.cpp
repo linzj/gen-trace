@@ -57,7 +57,7 @@ stop_conti_the_world (int pid, bool stop)
 
               if (ptraceret == -1)
                 {
-                  LOGE ("ptrace attach fails %s\n", strerror (errno));
+                  LOGE ("ptrace attach fails %s, pid %d\n", strerror (errno), cur_pid);
                   return false;
                 }
               waitpid (cur_pid, &status, __WALL);
@@ -67,8 +67,7 @@ stop_conti_the_world (int pid, bool stop)
               ptraceret = ptrace (PTRACE_DETACH, cur_pid, 0, 0);
               if (ptraceret == -1)
                 {
-                  LOGE ("ptrace detach fails %s\n", strerror (errno));
-                  return false;
+                  LOGE ("ptrace detach fails %s pid %d\n", strerror (errno), cur_pid);
                 }
             }
         }
@@ -82,7 +81,10 @@ modify (const struct mem_modify_instr **instr, int count_of_instr)
   int count = 0;
 
   pid_t target_pid = getppid ();
-  stop_conti_the_world (target_pid, true);
+  if (!stop_conti_the_world (target_pid, true))
+    {
+      return 0;
+    }
   for (int i = 0; i < count_of_instr; ++i)
     {
       int count_for_long = instr[i]->size / sizeof (long);

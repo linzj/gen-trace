@@ -57,7 +57,7 @@ OBJS := $(MAIN_OBJS) \
 		\
 		$(X64_TEST_OBJS)
 
-CFLAGS := -O2 -g3 -gdwarf-4 -Wall -I. -fPIC -fvisibility=hidden -mthumb -march=armv7-a --sysroot=$(NDK_PATH_SYSROOT)
+CFLAGS := -O0 -g3 -gdwarf-4 -Wall -I. -fPIC -fvisibility=hidden -mthumb -march=armv7-a --sysroot=$(NDK_PATH_SYSROOT)
 
 LDFLAGS := -pie
 LDLIBS := -L$(GNU_STL_PATH) $(GNU_STL) -llog

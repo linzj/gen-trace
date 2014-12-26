@@ -179,7 +179,6 @@ base_controller::do_modify (config_desc *config_desc)
                      called_callback_, return_callback_);
   LOGI ("base_controller::do_modify: code_modified_count = %d\n",
         code_modified_count);
-  sleep (5);
 }
 
 bool
