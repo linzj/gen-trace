@@ -316,7 +316,6 @@ arm_target_client::modify_code (code_context *context)
         first |= imm4 << 16;
         first |= ip << 12;
         first |= imm12;
-        first |= 1;
       }
       {
         uint32_t imm4 = (higher_imm16 & 0xf000) >> 12;

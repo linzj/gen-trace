@@ -11,6 +11,7 @@
 #include <unistd.h>
 #include <pthread.h>
 #include <assert.h>
+#include "StopWorld.h"
 
 // machine base
 #ifdef __x86_64__
@@ -203,7 +204,9 @@ base_controller::thread_worker (void *self)
   timespec spec = { config_desc->sleep_sec, 0 };
   nanosleep (&spec, NULL);
   LOGI ("base_controller::thread_worker, end sleep.\n");
+  stopTheWorld ();
   _self->do_rest_with_config (config_desc);
+  restartTheWorld ();
   _self->detain ();
   return NULL;
 }
