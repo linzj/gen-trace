@@ -98,9 +98,17 @@ base_controller::fill_config (fp_line_client *fp_client)
 {
   config_reader cr;
   const char *line;
-  assert (errno == 0);
+  int _errno = errno;
+  if (_errno)
+    {
+      LOGE ("errno is not zero %s\n", strerror (_errno));
+      errno = 0;
+    }
+
   while ((line = fp_client->next_line ()) != NULL)
     {
+      // work around the stupid C implementation of android.
+      errno = 0;
       cr.handle_line (line);
     }
   return cr.accumulate ();
