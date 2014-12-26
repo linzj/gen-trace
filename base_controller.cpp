@@ -98,6 +98,7 @@ base_controller::fill_config (fp_line_client *fp_client)
 {
   config_reader cr;
   const char *line;
+  errno = 0;
   while ((line = fp_client->next_line ()) != NULL)
     {
       cr.handle_line (line);

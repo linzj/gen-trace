@@ -218,6 +218,7 @@ struct Initializer
     fprintf (file_to_write, "{\"traceEvents\": [");
     pthread_t my_writer_thread;
     pthread_create (&my_writer_thread, NULL, WriterThread, NULL);
+    pthread_detach (my_writer_thread);
     // time initialize, the thread_timer is used to update s_time in a pthread.
     timer_t thread_timer;
 
