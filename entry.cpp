@@ -1,6 +1,7 @@
 #include "code_modify.h"
 #include "base_controller.h"
 #include "log.h"
+#include <memory>
 #include <fstream>
 #include <string>
 
@@ -14,28 +15,31 @@ namespace
 class my_fp_line_client : public fp_line_client
 {
 public:
-  my_fp_line_client (const char *);
+  my_fp_line_client (std::auto_ptr<std::ifstream> file);
   ~my_fp_line_client ();
 
 private:
   virtual const char *next_line ();
-  std::ifstream file_;
   std::string line_buf_;
+  std::auto_ptr<std::ifstream> file_;
 };
 
-my_fp_line_client::my_fp_line_client (const char *pname) : file_ (pname) {}
+my_fp_line_client::my_fp_line_client (std::auto_ptr<std::ifstream> file)
+    : file_ (file)
+{
+}
 
 my_fp_line_client::~my_fp_line_client () {}
 
 const char *
 my_fp_line_client::next_line ()
 {
-  if (!file_)
+  if (!*file_)
     {
       return NULL;
     }
   line_buf_.clear ();
-  std::getline (file_, line_buf_);
+  std::getline (*file_, line_buf_);
   return line_buf_.c_str ();
 }
 
@@ -57,7 +61,12 @@ file_controller::open_line_client ()
 #else
 #define TRACE_FILE "/sdcard/trace.config"
 #endif
-  return new my_fp_line_client (TRACE_FILE);
+  std::auto_ptr<std::ifstream> file (new std::ifstream (TRACE_FILE));
+  if (!*file)
+    {
+      return NULL;
+    }
+  return new my_fp_line_client (file);
 }
 
 void

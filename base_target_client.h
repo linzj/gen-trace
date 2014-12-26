@@ -17,7 +17,7 @@ private:
                     pfn_ret_callback return_callback);
 
 protected:
-  virtual int byte_needed_to_modify () = 0;
+  virtual int byte_needed_to_modify (intptr_t target_code_point) = 0;
   virtual disassembler *new_disassembler () = 0;
   virtual dis_client *new_code_check_client () = 0;
   virtual dis_client *new_backedge_check_client (intptr_t base,

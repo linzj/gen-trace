@@ -9,7 +9,7 @@ public:
   ~arm_target_client ();
 
 private:
-  virtual int byte_needed_to_modify ();
+  virtual int byte_needed_to_modify (intptr_t target_code_point);
   virtual disassembler *new_disassembler ();
   virtual dis_client *new_code_check_client ();
   virtual dis_client *new_backedge_check_client (intptr_t base,

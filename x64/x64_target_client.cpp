@@ -12,6 +12,7 @@
 const static int max_positive_jump = 0x7fffffff;
 const static int max_negative_jump = 0x80000000;
 const static int nop = 0x90;
+const static int byte_needed_to_modify_const = 5;
 // 0000000000000000 <foo()>:
 //    0:	55                   	push   %rbp
 //    1:	48 89 e5             	mov    %rsp,%rbp
@@ -147,7 +148,7 @@ x64_target_client::modify_code (code_context *context)
   intptr_t jump_dist
       = reinterpret_cast<intptr_t> (context->trampoline_code_start)
         - reinterpret_cast<intptr_t> (target_code_point
-                                      + byte_needed_to_modify ());
+                                      + byte_needed_to_modify_const);
   int jump_dist_int = static_cast<int> (jump_dist);
   memcpy (&modify_intr_pointer[1], &jump_dist_int, sizeof (int));
   return instr;
@@ -159,10 +160,9 @@ extern void template_for_hook2 (void);
 extern void template_for_hook_end (void);
 }
 
-int
-x64_target_client::byte_needed_to_modify ()
+int x64_target_client::byte_needed_to_modify (intptr_t)
 {
-  return 5;
+  return byte_needed_to_modify_const;
 }
 
 disassembler *
@@ -209,7 +209,7 @@ x64_target_client::check_jump_dist (intptr_t target_code_point,
                                     intptr_t trampoline_code_start)
 {
   intptr_t jump_dist = trampoline_code_start
-                       - (target_code_point + byte_needed_to_modify ());
+                       - (target_code_point + byte_needed_to_modify_const);
   if (jump_dist < 0 && jump_dist < max_negative_jump)
     return false;
   if (jump_dist > 0 && jump_dist > max_positive_jump)

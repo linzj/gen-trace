@@ -10,17 +10,17 @@
 
 #if defined(__x86_64__)
 static const char *test_lines[] = {
-  "libbase_controller_test_lib.so\n", "here\n", "00000000000007e0\n", "349\n",
-  "original_function\n",
+  "here\n", "0\n", "libbase_controller_test_lib.so\n", "00000000000007e0\n",
+  "349\n", "original_function\n",
 };
 #elif defined(__arm__)
 static const char *test_lines[] = {
-  "libbase_controller_test_lib.so\n", "here\n", "00000359\n", "348\n",
+  "here\n", "0\n", "libbase_controller_test_lib.so\n", "00000359\n", "348\n",
   "original_function\n",
 };
 static const char *test_lines2[] = {
-  "libbase_controller_test_lib_arm.so\n", "here\n", "00000358\n", "564\n",
-  "original_function\n",
+  "herearm\n", "0\n", "libbase_controller_test_lib_arm.so\n", "00000358\n",
+  "564\n", "original_function\n",
 };
 
 class test_fp_line_client_arm : public fp_line_client
@@ -119,6 +119,10 @@ main ()
   controller.do_it ();
   const char *ret = original_function (0, 1, 2, 3, 4, 5, 6);
   assert (strcmp (ret, "nimabi") == 0);
+  char *data = (char *)original_function;
+  data -= 1;
+  LOGI ("%x %x %x %x\n", data[0], data[1], data[2], data[3]);
+
 #ifdef __arm__
   {
     void *handle = dlopen ("./libbase_controller_test_lib_arm.so", RTLD_NOW);
@@ -137,6 +141,8 @@ main ()
     controller.do_it ();
     const char *ret = original_function (0, 1, 2, 3, 4, 5, 6);
     assert (strcmp (ret, "nimabi") == 0);
+    char *data = (char *)original_function;
+    LOGI ("%x %x %x %x\n", data[0], data[1], data[2], data[3]);
   }
 #endif
   return 0;

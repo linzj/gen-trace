@@ -31,7 +31,8 @@ base_target_client::check_code (void *code_point, const char *name,
   std::auto_ptr<dis_client> code_check_client (new_code_check_client ());
   std::auto_ptr<disassembler> dis (new_disassembler ());
   dis->set_client (code_check_client.get ());
-  int _byte_needed_to_modify = byte_needed_to_modify ();
+  int _byte_needed_to_modify
+      = byte_needed_to_modify (reinterpret_cast<intptr_t> (code_point));
   char *start = static_cast<char *> (code_point);
   int current = 0;
   if (code_size < _byte_needed_to_modify)
