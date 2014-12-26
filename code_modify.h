@@ -43,14 +43,21 @@ public:
     check_code_too_small,
     check_code_memory,
   };
+  enum build_trampoline_status
+  {
+    build_trampoline_okay,
+    build_trampoline_memory,
+    build_trampoline_jump_dist,
+  };
   virtual ~target_client ();
 
   // check if code accept to modify, and turn the context via the 2nd argument.
   virtual check_code_status check_code (void *, const char *, int code_size,
                                         code_manager *, code_context **) = 0;
-  virtual bool build_trampoline (code_manager *, code_context *,
-                                 pfn_called_callback called_callback,
-                                 pfn_ret_callback return_callback) = 0;
+  virtual build_trampoline_status
+  build_trampoline (code_manager *, code_context *,
+                    pfn_called_callback called_callback,
+                    pfn_ret_callback return_callback) = 0;
   virtual mem_modify_instr *modify_code (code_context *) = 0;
 };
 

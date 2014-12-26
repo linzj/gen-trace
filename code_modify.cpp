@@ -38,8 +38,11 @@ code_modify (const code_modify_desc *code_points, int count_of,
           == (check_code_status = g_client->check_code (
                   code_point, name, size, g_code_manager, &context)))
         {
-          if (g_client->build_trampoline (g_code_manager, context,
-                                          called_callback, return_callback))
+          target_client::build_trampoline_status build_trampoline_status;
+          if (target_client::build_trampoline_okay
+              == (build_trampoline_status = g_client->build_trampoline (
+                      g_code_manager, context, called_callback,
+                      return_callback)))
             {
               mem_modify_instr *instr = g_client->modify_code (context);
               v.push_back (instr);
@@ -49,8 +52,8 @@ code_modify (const code_modify_desc *code_points, int count_of,
             }
           else if (fp_for_fail)
             {
-              fprintf (fp_for_fail, "build trampoline: %p, %s\n", code_point,
-                       name);
+              fprintf (fp_for_fail, "build trampoline: %p, %s, %d\n",
+                       code_point, name, build_trampoline_status);
             }
         }
       else

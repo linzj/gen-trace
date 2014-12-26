@@ -35,8 +35,10 @@ main ()
         code, "test", sizeof (code), &code_manager, &cc);
     assert (target_client::check_code_okay == c);
     assert (cc->code_point == &code[0]);
-    assert (target_client->build_trampoline (
-        &code_manager, cc, (pfn_called_callback)main, (pfn_ret_callback)main));
+    assert (target_client::build_trampoline_okay
+            == target_client->build_trampoline (&code_manager, cc,
+                                                (pfn_called_callback)main,
+                                                (pfn_ret_callback)main));
     assert (cc->trampoline_code_start != 0);
     mem_modify_instr *instr = target_client->modify_code (cc);
     assert (instr);
@@ -51,8 +53,10 @@ main ()
                    reinterpret_cast<char *> (&code_thumb[0]) + 1, "test",
                    sizeof (code_thumb), &code_manager, &cc));
     assert (cc->code_point == reinterpret_cast<char *> (&code_thumb[0]) + 1);
-    assert (target_client->build_trampoline (
-        &code_manager, cc, (pfn_called_callback)main, (pfn_ret_callback)main));
+    assert (target_client::build_trampoline_okay
+            == target_client->build_trampoline (&code_manager, cc,
+                                                (pfn_called_callback)main,
+                                                (pfn_ret_callback)main));
     assert (cc->trampoline_code_start != 0);
     mem_modify_instr *instr = target_client->modify_code (cc);
     assert (instr);

@@ -66,7 +66,7 @@ base_target_client::check_code (void *code_point, const char *name,
   return check_code_okay;
 }
 
-bool
+target_client::build_trampoline_status
 base_target_client::build_trampoline (code_manager *m, code_context *context,
                                       pfn_called_callback called_callback,
                                       pfn_ret_callback return_callback)
@@ -82,14 +82,14 @@ base_target_client::build_trampoline (code_manager *m, code_context *context,
   void *code_mem = m->new_code_mem (context->code_point, template_size);
   if (!code_mem)
     {
-      return false;
+      return build_trampoline_memory;
     }
   // check if we can jump to our code.
   intptr_t code_mem_int = reinterpret_cast<intptr_t> (code_mem);
   intptr_t code_start = code_mem_int + sizeof (intptr_t) * 4;
   // FIXME: need to delete code mem before returns
   if (!check_jump_dist (target_code_point, code_start))
-    return false;
+    return build_trampoline_jump_dist;
 
   context->trampoline_code_start = reinterpret_cast<char *> (code_start);
   context->trampoline_code_end = reinterpret_cast<char *> (code_start)
@@ -116,5 +116,5 @@ base_target_client::build_trampoline (code_manager *m, code_context *context,
       = reinterpret_cast<void *> (target_code_point + modified_code_len);
   modify_pointer[-1] = (void *)return_callback;
   flush_code (code_mem, template_size);
-  return true;
+  return build_trampoline_okay;
 }

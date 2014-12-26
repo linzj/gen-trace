@@ -18,7 +18,7 @@ private:
     context->code_point = target;
     return check_code_okay;
   }
-  virtual bool
+  virtual build_trampoline_status
   build_trampoline (code_manager *code_manager, code_context *context,
                     pfn_called_callback called_callback,
                     pfn_ret_callback return_callback)
@@ -31,7 +31,7 @@ private:
     c->trampoline_code_end = static_cast<char *> (code) + 9;
     c->called_callback = called_callback;
     c->return_callback = return_callback;
-    return c;
+    return build_trampoline_okay;
   }
   virtual mem_modify_instr *
   modify_code (code_context *context)
