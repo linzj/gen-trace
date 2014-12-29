@@ -57,7 +57,8 @@ stop_conti_the_world (int pid, bool stop)
 
               if (ptraceret == -1)
                 {
-                  LOGE ("ptrace attach fails %s, pid %d\n", strerror (errno), cur_pid);
+                  LOGE ("ptrace attach fails %s, pid %d\n", strerror (errno),
+                        cur_pid);
                   return false;
                 }
               waitpid (cur_pid, &status, __WALL);
@@ -67,7 +68,8 @@ stop_conti_the_world (int pid, bool stop)
               ptraceret = ptrace (PTRACE_DETACH, cur_pid, 0, 0);
               if (ptraceret == -1)
                 {
-                  LOGE ("ptrace detach fails %s pid %d\n", strerror (errno), cur_pid);
+                  LOGE ("ptrace detach fails %s pid %d\n", strerror (errno),
+                        cur_pid);
                 }
             }
         }
