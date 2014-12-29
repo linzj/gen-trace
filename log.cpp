@@ -15,7 +15,7 @@ logi (const char *fmt, ...)
   va_end (va);
   buf[bytes] = '\0';
 #ifndef __ANDROID__
-  fprintf (stdout, buf);
+  fputs (buf, stdout);
 #else
   __android_log_write (ANDROID_LOG_INFO, "LINZJ", buf);
 #endif
@@ -31,7 +31,7 @@ loge (const char *fmt, ...)
   va_end (va);
   buf[bytes] = '\0';
 #ifndef __ANDROID__
-  fprintf (stdout, buf);
+  fputs (buf, stdout);
 #else
   __android_log_write (ANDROID_LOG_ERROR, "LINZJ", buf);
 #endif

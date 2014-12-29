@@ -19,6 +19,11 @@
 #include <dirent.h>
 #include <fcntl.h>
 
+#ifndef __ANDROID__
+#include <sys/syscall.h>
+#define getdents(...) syscall (SYS_getdents, __VA_ARGS__)
+#endif
+
 static bool
 stop_conti_the_world (int pid, bool stop)
 {
