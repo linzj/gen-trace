@@ -82,8 +82,13 @@ base_controller::do_rest_with_config (config_desc *config_desc)
       if (base == 0)
         {
           LOGE ("base_controller::do_rest_with_config base equals to zero for "
-                "%s.\n",
-                module->module_name);
+                "%s, %d symbols.\n",
+                module->module_name, module->desc_array_size);
+          // zero the code point to tell modifier to ignore them.
+          for (int j = 0; j < module->desc_array_size; ++j)
+            {
+              module->desc_array[j].code_point = NULL;
+            }
           continue;
         }
       if (should_add_base_to_sym_base (base))

@@ -139,6 +139,9 @@ code_modify (const code_modify_desc *code_points, int count_of,
       const char *name = code_points[i].name;
       int size = code_points[i].size;
       target_client::check_code_status check_code_status;
+      // That means this code point should be ignored.
+      if (code_point == NULL)
+        continue;
       if (target_client::check_code_okay
           == (check_code_status = g_client->check_code (
                   code_point, name, size, g_code_manager, &context)))

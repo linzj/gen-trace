@@ -3,6 +3,7 @@
 #include <errno.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdint.h>
 #include <assert.h>
 #include <algorithm>
 #include <functional>
@@ -32,21 +33,24 @@ rtrim (std::string &s)
   return s;
 }
 
+static inline size_t
+align_to_word (size_t s)
+{
+  return (s + sizeof (intptr_t) - 1) & (~(sizeof (intptr_t) - 1));
+}
+
 bool
 config_reader::handle_line (const char *str)
 {
   line_++;
   bool to_return = true;
-  if (strncmp (str, "cc2", 3) == 0)
-    {
-      to_return = true;
-    }
   switch (state_)
     {
     case READ_WHERE_LOG:
       where_to_log_.assign (str);
       rtrim (where_to_log_);
       size_for_config_ += where_to_log_.size () + 1;
+      size_for_config_ = align_to_word (size_for_config_);
       state_ = READ_SLEEP_SEC;
       break;
     case READ_SLEEP_SEC:
@@ -79,6 +83,7 @@ config_reader::handle_line (const char *str)
         std::string module_name (str);
         rtrim (module_name);
         size_for_config_ += module_name.size () + 1 + sizeof (config_module);
+        size_for_config_ = align_to_word (size_for_config_);
         name_stack_.push_back (module_name);
         last_pos_array_.push_back (slot_array_.size ());
         state_ = READ_SYM_BASE;
@@ -127,6 +132,7 @@ config_reader::handle_line (const char *str)
         current_slot_.sym_name = name;
         slot_array_.push_back (current_slot_);
         size_for_config_ += sizeof (code_modify_desc) + name.size () + 1;
+        size_for_config_ = align_to_word (size_for_config_);
         state_ = READ_SYM_BASE;
       }
       break;
@@ -156,6 +162,7 @@ public:
   void *
   alloc (size_t s)
   {
+    s = align_to_word (s);
     if (buffer_ + s > end_)
       {
         assert (false);
