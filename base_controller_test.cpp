@@ -10,17 +10,17 @@
 
 #if defined(__x86_64__)
 static const char *test_lines[] = {
-  "here\n", "0\n", "libbase_controller_test_lib.so\n", "00000000000007e0\n",
-  "349\n", "original_function\n",
+  "here\n", "0\n", "module start\n", "libbase_controller_test_lib.so\n",
+  "0000000000000830\n", "349\n", "original_function\n", "module end\n",
 };
 #elif defined(__arm__)
 static const char *test_lines[] = {
-  "here\n", "0\n", "libbase_controller_test_lib.so\n", "00000359\n", "348\n",
-  "original_function\n",
+  "here\n", "0\n", "module start\n", "libbase_controller_test_lib.so\n",
+  "00000359\n", "348\n", "original_function\n", "module end\n",
 };
 static const char *test_lines2[] = {
-  "herearm\n", "0\n", "libbase_controller_test_lib_arm.so\n", "00000358\n",
-  "564\n", "original_function\n",
+  "herearm\n", "0\n", "module start\n", "libbase_controller_test_lib_arm.so\n",
+  "00000358\n", "564\n", "original_function\n", "module end\n",
 };
 
 class test_fp_line_client_arm : public fp_line_client
