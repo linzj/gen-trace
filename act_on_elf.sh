@@ -9,5 +9,5 @@ fi
 echo $2 > trace.config
 echo $3 >> trace.config
 echo ${1##*/}  >> trace.config
-
-readelf -sW $1 | python $(dirname $0)/filter_readelf.py| c++filt  >> trace.config
+MY_PATH=$(dirname $0)
+readelf -sW $1 | python $MY_PATH/filter_readelf.py| c++filt  | python ${MY_PATH}/post_filter.py >> trace.config
