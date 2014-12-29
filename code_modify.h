@@ -4,7 +4,7 @@
 #include <stddef.h>
 struct mem_modify_instr;
 typedef void (*pfn_called_callback)(void *original_ret, const char *name);
-typedef void *(*pfn_ret_callback)(void);
+typedef void *(*pfn_ret_callback)(const char *name);
 
 struct code_context
 {

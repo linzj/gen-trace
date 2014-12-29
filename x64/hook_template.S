@@ -68,6 +68,7 @@ template_for_hook2:
   pushq %rdx
   pushq %rdi
   pushq %rsi
+  movq .Lname(%rip), %rdi #the name of function, make char *.
   callq *.Lret_jump(%rip)
   movq %rax, %rcx # real return point goes to rax
   popq %rsi

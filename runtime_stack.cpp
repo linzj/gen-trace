@@ -57,6 +57,7 @@ struct CTraceStruct
   const char *name_;
   void *ret_addr_;
   CTraceStruct (const char *, int64_t start_time, void *ret_addr);
+  CTraceStruct ();
 };
 
 typedef std::vector<CTraceStruct> trace_vector;
@@ -153,6 +154,8 @@ CTraceStruct::CTraceStruct (const char *name, int64_t start_time,
   start_time_ = start_time;
   ret_addr_ = ret_addr;
 }
+
+CTraceStruct::CTraceStruct () {}
 
 ThreadInfo *
 _GetThreadInfo ()
@@ -358,7 +361,7 @@ WriterThread (void *)
 
 extern "C" {
 extern void __start_ctrace__ (void *original_ret, const char *name);
-extern void *__end_ctrace__ (void);
+extern void *__end_ctrace__ (const char *);
 }
 
 void
@@ -385,25 +388,33 @@ __start_ctrace__ (void *original_ret, const char *name)
 }
 
 void *
-__end_ctrace__ (void)
+__end_ctrace__ (const char *name)
 {
   ThreadInfo *tinfo = GetThreadInfo ();
-  CTraceStruct c = tinfo->stack_.back ();
-  tinfo->stack_.pop_back ();
-  int64_t currentTime = tinfo->UpdateVirtualTime (false);
-  if ((file_to_write != NULL)
-      && (tinfo->stack_.size () < ThreadInfo::max_stack))
+  CTraceStruct c;
+  while (true)
     {
-#ifdef STR_TO_ENABLE
-      if (!tinfo->enable_)
-        return c.ret_addr_;
-#endif // STR_TO_ENABLE
-      if (c.start_time_ != invalid_time)
+      c = tinfo->stack_.back ();
+      tinfo->stack_.pop_back ();
+      int64_t currentTime = tinfo->UpdateVirtualTime (false);
+      if ((file_to_write != NULL)
+          && (tinfo->stack_.size () < ThreadInfo::max_stack))
         {
-          // we should record this
-          c.end_time_ = currentTime;
-          if (c.end_time_ - c.start_time_ >= min_interval)
-            RecordThis (&c, tinfo);
+#ifdef STR_TO_ENABLE
+          if (!tinfo->enable_)
+            return c.ret_addr_;
+#endif // STR_TO_ENABLE
+          if (c.start_time_ != invalid_time)
+            {
+              // we should record this
+              c.end_time_ = currentTime;
+              if (c.end_time_ - c.start_time_ >= min_interval)
+                RecordThis (&c, tinfo);
+            }
+        }
+      if (c.name_ == name)
+        {
+          break;
         }
     }
 #ifdef STR_TO_ENABLE

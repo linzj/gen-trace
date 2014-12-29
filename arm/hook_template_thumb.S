@@ -47,6 +47,7 @@ template_for_hook_thumb_ret:
 .Lret:
   push {r0-r3}
   ldr ip, .Lret_jump
+  ldr r0, .Lname
   blx ip
   mov ip, r0
   pop {r0-r3}

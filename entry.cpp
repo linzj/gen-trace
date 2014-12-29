@@ -7,7 +7,7 @@
 
 extern "C" {
 extern void __start_ctrace__ (void *original_ret, const char *name);
-extern void *__end_ctrace__ (void);
+extern void *__end_ctrace__ (const char *);
 }
 
 namespace
