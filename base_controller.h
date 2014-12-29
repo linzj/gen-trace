@@ -2,6 +2,7 @@
 #define BASE_CONTROLLER_H
 #include <stdint.h>
 class config_desc;
+class config_module;
 
 class fp_line_client
 {
@@ -26,7 +27,7 @@ public:
 private:
   void do_rest_with_config (config_desc *desc);
   config_desc *fill_config (fp_line_client *);
-  intptr_t find_base (config_desc *);
+  intptr_t find_base (config_module *);
   bool should_add_base_to_sym_base (intptr_t module_base);
   void do_modify (config_desc *);
   bool is_base_elf (intptr_t base);

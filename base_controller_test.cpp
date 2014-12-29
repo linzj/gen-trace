@@ -90,7 +90,7 @@ hook (void *original_ret, const char *name)
 }
 
 static void *
-ret_hook (void)
+ret_hook (const char *)
 {
   assert (g_original_ret != NULL);
   LOGI ("ret_hook called\n");

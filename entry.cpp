@@ -40,6 +40,10 @@ my_fp_line_client::next_line ()
     }
   line_buf_.clear ();
   std::getline (*file_, line_buf_);
+  if (!*file_)
+    {
+      return NULL;
+    }
   return line_buf_.c_str ();
 }
 

@@ -75,20 +75,26 @@ base_controller::do_it ()
 void
 base_controller::do_rest_with_config (config_desc *config_desc)
 {
-  intptr_t base = find_base (config_desc);
-  if (base == 0)
+  for (int i = 0; i < config_desc->num_of_modules; ++i)
     {
-      LOGE ("base_controller::do_rest_with_config base equals to zero.\n");
-      return;
-    }
-  if (should_add_base_to_sym_base (base))
-    {
-      for (int i = 0; i < config_desc->desc_array_size; ++i)
+      struct config_module *module = &config_desc->modules[i];
+      intptr_t base = find_base (module);
+      if (base == 0)
         {
-          intptr_t v = reinterpret_cast<intptr_t> (
-              config_desc->desc_array[i].code_point);
-          v += base;
-          config_desc->desc_array[i].code_point = reinterpret_cast<void *> (v);
+          LOGE ("base_controller::do_rest_with_config base equals to zero for "
+                "%s.\n",
+                module->module_name);
+          continue;
+        }
+      if (should_add_base_to_sym_base (base))
+        {
+          for (int j = 0; j < module->desc_array_size; ++j)
+            {
+              intptr_t v = reinterpret_cast<intptr_t> (
+                  module->desc_array[j].code_point);
+              v += base;
+              module->desc_array[j].code_point = reinterpret_cast<void *> (v);
+            }
         }
     }
   do_modify (config_desc);
@@ -116,9 +122,9 @@ base_controller::fill_config (fp_line_client *fp_client)
 }
 
 intptr_t
-base_controller::find_base (config_desc *config_desc)
+base_controller::find_base (struct config_module *module)
 {
-  if (config_desc->module_name[0] == '\0')
+  if (module->module_name[0] == '\0')
     return 0;
   FILE *fp = fopen ("/proc/self/maps", "r");
   if (!fp)
@@ -127,7 +133,7 @@ base_controller::find_base (config_desc *config_desc)
     }
   char buf[512];
   char *str;
-  std::string search_for_module (config_desc->module_name);
+  std::string search_for_module (module->module_name);
   search_for_module.insert (0, "/");
   LOGI ("base_controller::find_base search for module: %s\n",
         search_for_module.c_str ());
@@ -175,7 +181,7 @@ base_controller::do_modify (config_desc *config_desc)
   code_modify_init (_target_client);
   code_modify_set_log_for_fail (config_desc->where_to_keep_log);
   int code_modified_count
-      = code_modify (config_desc->desc_array, config_desc->desc_array_size,
+      = code_modify (config_desc->all_desc, config_desc->num_of_all_desc,
                      called_callback_, return_callback_);
   LOGI ("base_controller::do_modify: code_modified_count = %d\n",
         code_modified_count);
