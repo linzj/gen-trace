@@ -22,6 +22,15 @@
 #ifndef __ANDROID__
 #include <sys/syscall.h>
 #define getdents(...) syscall (SYS_getdents, __VA_ARGS__)
+#define dirent linux_dirent
+struct linux_dirent
+{
+  long d_ino;
+  off_t d_off;
+  unsigned short d_reclen;
+  char d_name[];
+};
+
 #endif
 
 static bool
@@ -49,7 +58,7 @@ stop_conti_the_world (int pid, bool stop)
           struct dirent *cur = iterator;
           iterator = reinterpret_cast<struct dirent *> (
               reinterpret_cast<char *> (iterator) + cur->d_reclen);
-          if (!strcmp (cur->d_name, ".") || !strcmp (cur->d_name, ".."))
+          if (cur->d_name[0] == '.' || cur->d_name[0] == '\0')
             {
               continue;
             }
@@ -64,7 +73,6 @@ stop_conti_the_world (int pid, bool stop)
                 {
                   LOGE ("ptrace attach fails %s, pid %d\n", strerror (errno),
                         cur_pid);
-                  return false;
                 }
               waitpid (cur_pid, &status, __WALL);
             }

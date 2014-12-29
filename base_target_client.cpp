@@ -80,7 +80,8 @@ base_target_client::build_trampoline (code_manager *m, code_context *context,
   const int template_code_size = (char *)_template_end
                                  - (char *)_template_start;
   int template_size = template_code_size + sizeof (intptr_t) * 4;
-  template_size = (template_size + 3) & ~(4 - 1);
+  template_size = (template_size + sizeof (intptr_t) - 1)
+                  & ~(sizeof (intptr_t) - 1);
   void *hint;
   if (use_target_code_point_as_hint ())
     {
