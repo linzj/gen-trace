@@ -10,6 +10,11 @@ key_words = (
 'Lock',
 'CheckMallocResult',
 'tc_',
+'GetSizeWithCallback',
+'PackedCache',
+'SIGCHLDHandler',
+'base',
+'std',
 )
 def has_key_word(_str):
     for key_word in key_words:

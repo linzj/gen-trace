@@ -15,6 +15,7 @@
 // C++ Headers
 #include <new>
 #include <vector>
+#include "log.h"
 
 #ifdef __ANDROID__
 #define CTRACE_FILE_NAME "/sdcard/trace_%d.json"
@@ -60,15 +61,15 @@ struct CTraceStruct
   CTraceStruct ();
 };
 
-typedef std::vector<CTraceStruct> trace_vector;
-
 struct ThreadInfo
 {
   static const int max_stack = 1000;
   int pid_;
   int tid_;
   int64_t virtual_time_;
-  trace_vector stack_;
+  CTraceStruct stack_[max_stack];
+  int stack_end_;
+  bool at_work_;
 
 #ifdef STR_TO_ENABLE
   bool enable_;
@@ -77,6 +78,8 @@ struct ThreadInfo
   int64_t UpdateVirtualTime (bool fromStart);
   static ThreadInfo *New ();
   static ThreadInfo *Find ();
+  void Push (const char *name, int64_t start_time, void *ret_addr);
+  CTraceStruct Pop ();
 };
 
 static const int MAX_THREADS = 1000;
@@ -124,6 +127,28 @@ ThreadInfo::ThreadInfo ()
 #ifdef STR_TO_ENABLE
   enable_ = false;
 #endif // STR_TO_ENABLE
+  at_work_ = false;
+  stack_end_ = 0;
+}
+
+void
+ThreadInfo::Push (const char *name, int64_t start_time, void *ret_addr)
+{
+  if (stack_end_ >= max_stack)
+    {
+      CRASH ();
+    }
+  stack_[stack_end_++] = CTraceStruct (name, start_time, ret_addr);
+}
+
+CTraceStruct
+ThreadInfo::Pop ()
+{
+  if (stack_end_ == 0)
+    {
+      CRASH ();
+    }
+  return stack_[--stack_end_];
 }
 
 int64_t
@@ -370,6 +395,9 @@ __start_ctrace__ (void *original_ret, const char *name)
   if (file_to_write == 0)
     return;
   ThreadInfo *tinfo = GetThreadInfo ();
+  if (tinfo->at_work_)
+    CRASH ();
+  tinfo->at_work_ = true;
 #ifdef STR_TO_ENABLE
   if (!tinfo->enable_)
     {
@@ -378,31 +406,40 @@ __start_ctrace__ (void *original_ret, const char *name)
           tinfo->enable_ = true;
         }
       else
-        return;
+        {
+          tinfo->at_work_ = false;
+          return;
+        }
     }
 #endif // STR_TO_ENABLE
   int64_t currentTime = tinfo->UpdateVirtualTime (true);
 
-  CTraceStruct cs (name, currentTime, original_ret);
-  tinfo->stack_.push_back (cs);
+  tinfo->Push (name, currentTime, original_ret);
+  tinfo->at_work_ = false;
 }
 
 void *
 __end_ctrace__ (const char *name)
 {
   ThreadInfo *tinfo = GetThreadInfo ();
+
+  if (tinfo->at_work_)
+    CRASH ();
+  tinfo->at_work_ = true;
+
   CTraceStruct c;
   while (true)
     {
-      c = tinfo->stack_.back ();
-      tinfo->stack_.pop_back ();
+      c = tinfo->Pop ();
       int64_t currentTime = tinfo->UpdateVirtualTime (false);
-      if ((file_to_write != NULL)
-          && (tinfo->stack_.size () < ThreadInfo::max_stack))
+      if (file_to_write != NULL)
         {
 #ifdef STR_TO_ENABLE
           if (!tinfo->enable_)
-            return c.ret_addr_;
+            {
+              tinfo->at_work_ = false;
+              return c.ret_addr_;
+            }
 #endif // STR_TO_ENABLE
           if (c.start_time_ != invalid_time)
             {
@@ -418,8 +455,9 @@ __end_ctrace__ (const char *name)
         }
     }
 #ifdef STR_TO_ENABLE
-  if (tinfo->stack_.size () == 0)
+  if (tinfo->stack_end_ == 0)
     tinfo->enable_ = false;
 #endif // STR_TO_ENABLE
+  tinfo->at_work_ = false;
   return c.ret_addr_;
 }
