@@ -113,7 +113,8 @@ base_controller::fill_config (fp_line_client *fp_client)
   int _errno = errno;
   if (_errno)
     {
-      LOGE ("errno is not zero %s\n", strerror (_errno));
+      LOGE ("errno is not zero %s, %s, %d\n", strerror (_errno), __FILE__,
+            __LINE__);
       errno = 0;
     }
 
@@ -136,15 +137,17 @@ base_controller::find_base (struct config_module *module)
     {
       return 0;
     }
-  char buf[512];
+  char buf[2048];
   char *str;
   std::string search_for_module (module->module_name);
   search_for_module.insert (0, "/");
   LOGI ("base_controller::find_base search for module: %s\n",
         search_for_module.c_str ());
-  while ((str = fgets (buf, 512, fp)) != NULL)
+  while ((str = fgets (buf, 2048, fp)) != NULL)
     {
-      if (strstr (str, search_for_module.c_str ()))
+      char *test;
+      if ((test = strstr (str, search_for_module.c_str ()))
+          && test[search_for_module.size ()] == '\n')
         {
           break;
         }
@@ -152,6 +155,7 @@ base_controller::find_base (struct config_module *module)
   fclose (fp);
   if (str == NULL)
     {
+      LOGE ("fails to find module at proc maps\n");
       return 0;
     }
   // work around the stupid C implementation of android.

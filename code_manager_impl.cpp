@@ -61,13 +61,14 @@ code_manager_impl::new_code_mem (void *hint, size_t s)
   intptr_t page_mask = ~(PAGE_SIZE - 1);
   hint_i &= page_mask;
   hint_i += PAGE_SIZE;
-  unsigned char whatever;
-  while (mincore (reinterpret_cast<void *> (hint_i), PAGE_SIZE, &whatever)
-         == 0)
+  query_status q_status;
+
+  while ((q_status = query (reinterpret_cast<void *> (hint_i)))
+         == query_occupied)
     {
       hint_i += PAGE_SIZE;
     }
-  if (errno != ENOMEM)
+  if (q_status != query_okay)
     {
       LOGE ("mincore fails %s\n", strerror (errno));
       return NULL;
@@ -115,4 +116,26 @@ code_manager_impl::new_code_mem_no_hint (size_t s)
       return new_code_mem_no_hint (s);
     }
   return NULL;
+}
+
+code_manager_impl::query_status
+code_manager_impl::query (void *q)
+{
+  typedef std::set<void *>::iterator iterator;
+  std::pair<iterator, bool> r = queried_.insert (q);
+  if (r.second == false)
+    {
+      return query_occupied;
+    }
+  unsigned char whatever;
+  int mincore_return = mincore (q, PAGE_SIZE, &whatever);
+  if (mincore_return == 0)
+    {
+      return query_occupied;
+    }
+  else if (errno != ENOMEM)
+    {
+      return query_mincore_fail;
+    }
+  return query_okay;
 }

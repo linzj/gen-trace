@@ -79,7 +79,7 @@ struct ThreadInfo
   static ThreadInfo *Find ();
 };
 
-static const int MAX_THREADS = 100;
+static const int MAX_THREADS = 1000;
 char info_store_char[MAX_THREADS * sizeof (ThreadInfo)];
 
 struct FreeListNode
