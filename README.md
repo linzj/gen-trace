@@ -25,7 +25,7 @@ Run your target program like this.
 ```
 LD_PRELOAD=xxxx/libtrace.so your program
 ```
-DON'T FORGET THE PUT THE trace.config FILE TO CURRENT WORKING DIRECTORY.
+**DON'T FORGET THE PUT THE trace.config FILE TO CURRENT WORKING DIRECTORY.**
 
 ### Runing on Android ARM
 The compile command is make -f Makefile.arm. But before that, you need to export
@@ -37,7 +37,7 @@ export NDK_PATH=<your ndk>
 Then libtrace.so need to be pushed to /data/local/tmp/, and trace.config need to be
 pushed to /sdcard/. The location of trace.config can be changed in the source entry.cpp.
 But I think it's a suitable location.
-You app needs to be run with a wrapper. So make sure your device is rooted.
+You app needs to be run with a wrapper. **So make sure your device is rooted.**
 A wrapper is like this:
 ```
 LD_LIBRARY_PATH=/data/local/tmp:$LD_LIBRARY_PATH \
@@ -63,5 +63,15 @@ setenforce 0
 ##Design
 The main design is runtime code modification and trampoline generation.
 
+###Code Modification
+A jump instruction will overwrite the targeting code point, which is specify in trace.config. A targeting
+code point is very beginning of a function. Before overwrite, original instructions will be checked if they
+are suitable to get modified.
+####Checking Code
+The sequence of the original instructions is fine to get modified, only when they are pc context free. That
+means no pc register invovled. That includes all load, store instructions with pc register, and all the jump instructions.
+The second constraint is the rest code of the function will not reference the
+code modified. For example, the rest of the function may jump back to the code modified.
+####Jumping Instruction
 
 
