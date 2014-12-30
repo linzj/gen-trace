@@ -3,7 +3,7 @@ gen-trace runtime version
 
 ##GOAL
 
-I want to generate a trace file that chrome://tracing understands, with only symobols of the elfs,
+I want to generate a trace file that chrome://tracing understands, with only symbols of the elfs,
 including share libraries and executable on Linux platform.
 
 ##Usage
@@ -12,7 +12,7 @@ including share libraries and executable on Linux platform.
 The very first step. You need to identify which elfs want to trace, and where they are.
 Then run the script act_on_elf.sh. It accept at least 3 arguments. The first is the log file,
 which can be empty string like "". The second is the seconds pausing before code modification
-actully take action. The third and so is the elfs you want to trace. An example is shown below:
+actually take action. The third and so is the elfs you want to trace. An example is shown below:
 ```
 ./act_on_elf.sh "" 10 libBrowserShell_UC.so
 ```
@@ -27,7 +27,7 @@ LD_PRELOAD=xxxx/libtrace.so your program
 ```
 **DON'T FORGET THE PUT THE trace.config FILE TO CURRENT WORKING DIRECTORY.**
 
-### Runing on Android ARM
+### Running on Android ARM
 The compile command is make -f Makefile.arm. But before that, you need to export
 environment variable to the shell.
 ```
@@ -58,7 +58,7 @@ setprop wrap.you.app.package.name /data/local/tmp/wrapper
 ```
 setenforce 0
 ```
-2.The second argument of setprop can not exceed 32 char long. So you need to truncate that arugument to 32 chars.
+2.The second argument of setprop can not exceed 32 char long. So you need to truncate that argument to 32 chars.
 
 ##Design
 The main design is runtime code modification and trampoline generation.
