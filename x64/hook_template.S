@@ -21,8 +21,8 @@ template_for_hook:
   pushq %r9 # -64
   pushq %rax # -72
   pushq %rbx # -80
-  pushq %rbp # -88
-  pushq %rbp # -96
+  pushq %r10 # -88
+  pushq %r11 # -96
   # override the return point.
   leaq .Lret_point(%rip), %rax
   movq %rax, 88(%rsp)
@@ -30,8 +30,8 @@ template_for_hook:
   movq 80(%rsp), %rdi #the caller.
   movq .Lname(%rip), %rsi #the name of function, make char *.
   callq *.Lhook_function(%rip) # gogogogo
-  popq %rbp
-  popq %rbp
+  popq %r11
+  popq %r10
   popq %rbx
   popq %rax
   popq %r9
