@@ -69,29 +69,29 @@ LDLIBS := -lpthread -lrt
 	g++ -MM $(CFLAGS) $*.S > $*.d
 
 mem_modify_test: mem_modify_test.o log.o mem_modify.o
-	g++ $(LDFLAGS) -o $@ $^
+	g++ $(LDFLAGS) -o $@ $^ $(LDLIBS)
 
 code_manager_impl_test: code_manager_impl.o log.o code_manager_impl_test.o
-	g++ $(LDFLAGS) -o $@ $^
+	g++ $(LDFLAGS) -o $@ $^ $(LDLIBS)
 
 code_modify_test: code_modify_test.o log.o code_manager_impl.o code_modify.o mem_modify.o
-	g++ $(LDFLAGS) -o $@ $^
+	g++ $(LDFLAGS) -o $@ $^ $(LDLIBS)
 
 dis_x64_test: x64/dis.o x64/dis_test.o x64/dis_gnu.o log.o disassembler.o dis_client.o
-	g++ $(LDFLAGS) -o $@ $^
+	g++ $(LDFLAGS) -o $@ $^ $(LDLIBS)
 
 hook_template_test: x64/hook_template_test.o x64/hook_template.o log.o
-	g++ $(LDFLAGS) -o $@ $^
+	g++ $(LDFLAGS) -o $@ $^ $(LDLIBS)
 x64_target_client_test: x64/hook_template.o x64/dis.o x64/dis_gnu.o x64/x64_target_client.o x64/x64_target_client_test.o code_manager_impl.o log.o code_modify.o mem_modify.o disassembler.o dis_client.o base_target_client.o
-	g++ $(LDFLAGS) -o $@ $^
+	g++ $(LDFLAGS) -o $@ $^ $(LDLIBS)
 config_reader_test: config_reader.o config_reader_test.o log.o
-	g++ $(LDFLAGS) -o $@ $^
+	g++ $(LDFLAGS) -o $@ $^ $(LDLIBS)
 
 libbase_controller_test_lib.so: base_controller_test_lib.o log.o
-	g++ -shared -o $@ $^
+	g++ -shared -o $@ $^ $(LDLIBS)
 
 base_controller_test: config_reader.o  base_controller.o code_manager_impl.o log.o code_modify.o mem_modify.o x64/hook_template.o x64/dis.o x64/dis_gnu.o x64/x64_target_client.o base_controller_test.o libbase_controller_test_lib.so disassembler.o dis_client.o base_target_client.o
-	g++ $(LDFLAGS) -o $@ $(filter %.o, $^) $(LDLIBS) -ldl
+	g++ $(LDFLAGS) -o $@ $(filter %.o, $^) $(LDLIBS) -ldl $(LDLIBS)
 
 clean:
 	rm *.o *.d **/*.o **/*.d
