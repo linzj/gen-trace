@@ -11,6 +11,8 @@
 
 #include "log.h"
 #include "code_manager_impl.h"
+static const int g_close_enough_threshold = 0x7fffffff;
+static intptr_t page_mask = ~(PAGE_SIZE - 1);
 
 code_manager::~code_manager () {}
 
@@ -49,16 +51,21 @@ code_manager_impl::new_code_mem (void *hint, size_t s)
   // check if current_page_ suitable.
   intptr_t hint_i = reinterpret_cast<intptr_t> (hint);
   intptr_t current_page_i = reinterpret_cast<intptr_t> (current_page_);
-  if (current_page_i && (current_page_i <= (hint_i + 0x7fffffff))
-      && (current_page_i >= (hint_i - 0x7fffffff)) && (left_ >= s))
+  bool near = (current_page_i <= (hint_i + 0x7fffffff))
+              && (current_page_i >= (hint_i - 0x7fffffff));
+  if (current_page_i && near && (left_ >= s))
     {
       void *ret = current_page_;
       current_page_ += s;
       left_ -= s;
       return ret;
     }
+  // Test if hint is close enough to current_page_.
+  if (near)
+    {
+      hint_i = reinterpret_cast<intptr_t> (current_page_ + PAGE_SIZE);
+    }
   // Make a suitable page.
-  intptr_t page_mask = ~(PAGE_SIZE - 1);
   hint_i &= page_mask;
   hint_i += PAGE_SIZE;
   query_status q_status;
