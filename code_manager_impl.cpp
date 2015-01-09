@@ -63,7 +63,7 @@ code_manager_impl::new_code_mem (void *hint, size_t s)
   // Test if hint is close enough to current_page_.
   if (near)
     {
-      hint_i = reinterpret_cast<intptr_t> (current_page_ + PAGE_SIZE);
+      hint_i = reinterpret_cast<intptr_t> (current_page_);
     }
   // Make a suitable page.
   hint_i &= page_mask;
