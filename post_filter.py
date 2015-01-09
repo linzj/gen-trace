@@ -1,10 +1,13 @@
 import sys
 white_key_words = (
-'Prerender',
+'blink::',
+'content::',
 )
 
 black_key_words = (
 'std::',
+'<',
+'~',
 )
 
 def has_white_key_word(_str):
