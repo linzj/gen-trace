@@ -151,14 +151,6 @@ ThreadInfo::Pop ()
   return stack_[--stack_end_];
 }
 
-static inline void
-do_timer ()
-{
-  int64_t tmp = s_time;
-  int64_t tmp2 = tmp + frequency;
-  __sync_bool_compare_and_swap (&s_time, tmp, tmp2);
-}
-
 int64_t
 ThreadInfo::UpdateVirtualTime (bool fromStart)
 {
@@ -168,9 +160,7 @@ ThreadInfo::UpdateVirtualTime (bool fromStart)
       if (fromStart)
         {
           if (virtual_time_ >= tmp + frequency)
-            {
-              do_timer ();
-            }
+            return invalid_time;
           // return the original value.
           return ++virtual_time_;
         }
@@ -225,7 +215,7 @@ DeleteThreadInfo (void *tinfo)
 
 void *WriterThread (void *);
 
-static void timer_func (union sigval) { do_timer (); }
+static void timer_func (union sigval) { s_time += frequency; }
 
 struct Initializer
 {
