@@ -159,8 +159,6 @@ ThreadInfo::UpdateVirtualTime (bool fromStart)
     {
       if (fromStart)
         {
-          if (virtual_time_ >= tmp + frequency)
-            return invalid_time;
           // return the original value.
           return ++virtual_time_;
         }
