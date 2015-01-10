@@ -56,12 +56,17 @@ Then connect the wrapper with you app:
 setprop wrap.you.app.package.name /data/local/tmp/wrapper
 ```
 ####CAVEATS
-1.On Android 5.0 or above, you also need to shutdown SELinux:
+1. On Android 5.0 or above, you also need to shutdown SELinux:
 ```
 setenforce 0
 ```
-2.The second argument of setprop can not exceed 32 char long. So you need to
+2. The second argument of setprop can not exceed 32 char long. So you need to
 truncate that argument to 32 chars.
+3. The generated .json file is not put an end mark into. So you needs to do the
+following:
+```
+echo ']}' >> trace_pid.json
+```
 
 ##Design
 The main design is runtime code modification and trampoline generation.

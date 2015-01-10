@@ -61,7 +61,7 @@ code_manager_impl::new_code_mem (void *hint, size_t s)
       return ret;
     }
   // Test if hint is close enough to current_page_.
-  if (near)
+  if (near && current_page_)
     {
       hint_i = reinterpret_cast<intptr_t> (current_page_);
     }
@@ -87,7 +87,8 @@ code_manager_impl::new_code_mem (void *hint, size_t s)
                            MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED, -1, 0);
     if (new_page == MAP_FAILED)
       {
-        LOGE ("mmap fails %s\n", strerror (errno));
+        LOGE ("mmap fails %s, %d, %08lx\n", strerror (errno), __LINE__,
+              hint_i);
         return NULL;
       }
     current_page_ = static_cast<char *> (new_page);
@@ -114,7 +115,7 @@ code_manager_impl::new_code_mem_no_hint (size_t s)
                   MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
       if (new_page == MAP_FAILED)
         {
-          LOGE ("mmap fails %s\n", strerror (errno));
+          LOGE ("mmap fails %s, %d\n", strerror (errno), __LINE__);
           return NULL;
         }
       current_page_ = static_cast<char *> (new_page);

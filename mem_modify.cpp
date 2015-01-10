@@ -162,6 +162,7 @@ mem_modify (const struct mem_modify_instr **instr, int count_of_instr)
       int readret;
 #ifdef PR_SET_PTRACER
       int ptrctlret = prctl (PR_SET_PTRACER, forkret, 0, 0, 0);
+      int errno_ptrctl = errno;
       int writeret;
       do
         {
@@ -170,7 +171,7 @@ mem_modify (const struct mem_modify_instr **instr, int count_of_instr)
       while (writeret == -1 && errno == EINTR);
       if (ptrctlret == -1)
         {
-          LOGE ("ptrctl fails %s\n", strerror (errno));
+          LOGE ("ptrctl fails %s\n", strerror (errno_ptrctl));
           close (sv[1]);
           goto fails;
         }
