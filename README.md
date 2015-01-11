@@ -67,6 +67,8 @@ following:
 ```
 echo ']}' >> trace_pid.json
 ```
+4. To maximum the precision, I use nanosecond as unit. But chrome uses
+microseconds. So the output graph may looks 1000 times longer.
 
 ##Design
 The main design is runtime code modification and trampoline generation.

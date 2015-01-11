@@ -5,12 +5,13 @@
 #include <time.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <assert.h>
 // POSIX Headers
 #include <unistd.h>
 #include <pthread.h>
 #include <signal.h>
-#include <sys/time.h>
+#include <errno.h>
 #include <sys/syscall.h>
 // C++ Headers
 #include <new>
@@ -37,11 +38,11 @@ namespace
 pthread_key_t thread_info_key;
 FILE *file_to_write;
 static const int64_t invalid_time = static_cast<int64_t> (-1);
-// frequency in microsec.
-static const int frequency = 100;
+// frequency in nano.
+static const int frequency = 100 * 1000;
 static const int ticks = 1;
 // time facilities, in microsec.
-static const int64_t min_interval = 1 * frequency;
+static const int64_t min_interval = 1000;
 static volatile int64_t s_time = 0;
 
 // for WriterThread
@@ -213,7 +214,28 @@ DeleteThreadInfo (void *tinfo)
 
 void *WriterThread (void *);
 
-static void timer_func (union sigval) { s_time += frequency; }
+static void *
+timer_func (void *)
+{
+  pthread_setname_np (pthread_self (), "timer_update");
+  struct timespec req;
+  req.tv_sec = 0;
+  req.tv_nsec = frequency;
+  while (true)
+    {
+      struct timespec rem, *wait_for = &req;
+      int nanosleep_ret;
+
+      do
+        {
+          nanosleep_ret = nanosleep (wait_for, &rem);
+          wait_for = &rem;
+        }
+      while (nanosleep_ret == -1 && EINTR == errno);
+      s_time += frequency;
+    }
+  return NULL;
+}
 
 struct Initializer
 {
@@ -245,23 +267,11 @@ struct Initializer
     pthread_t my_writer_thread;
     pthread_create (&my_writer_thread, NULL, WriterThread, NULL);
     pthread_detach (my_writer_thread);
-    // time initialize, the thread_timer is used to update s_time in a pthread.
-    timer_t thread_timer;
-
-    struct sigevent sev = { 0 };
-    sev.sigev_notify = SIGEV_THREAD;
-    sev.sigev_notify_function = timer_func;
-    if (0 != timer_create (CLOCK_MONOTONIC, &sev, &thread_timer))
+    // timer initialize, the timer_func is used to update s_time in a pthread.
+    pthread_t thread_timer;
+    if (-1 == pthread_create (&thread_timer, NULL, timer_func, NULL))
       {
-        CRASH ();
-      }
-    struct itimerspec timerspec;
-    timerspec.it_value.tv_sec = 0;
-    timerspec.it_value.tv_nsec = frequency * 1000;
-    timerspec.it_interval = timerspec.it_value;
-
-    if (0 != timer_settime (thread_timer, 0, &timerspec, NULL))
-      {
+        LOGE ("timer thread fails to start: %s\n", strerror (errno));
         CRASH ();
       }
   }
