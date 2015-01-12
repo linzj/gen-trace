@@ -274,6 +274,8 @@ struct Initializer
         LOGE ("timer thread fails to start: %s\n", strerror (errno));
         CRASH ();
       }
+    // No need to wait or join thread_timer.
+    pthread_detach (thread_timer);
   }
 
   ~Initializer () { fclose (file_to_write); }
