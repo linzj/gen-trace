@@ -44,12 +44,13 @@ stop_conti_the_world (int pid, bool stop)
       return false;
     }
   struct dirent _DIR_buff[15];
+  bool error = false;
   while (true)
     {
       int ret = getdents (fd, _DIR_buff, sizeof (_DIR_buff));
       if (ret <= 0)
         {
-          return true;
+          break;
         }
       struct dirent *iterator = _DIR_buff;
       while (ret)
@@ -73,14 +74,32 @@ stop_conti_the_world (int pid, bool stop)
                 {
                   waitpid (cur_pid, &status, __WALL);
                 }
+              else if (cur_pid == pid)
+                {
+                  error = true;
+                  LOGE ("ptrace attach fails for %d, %s\n", cur_pid,
+                        strerror (errno));
+                  snprintf (buf, 256, "/proc/%d/status", cur_pid);
+                  FILE *f = fopen (buf, "r");
+                  const char *str;
+                  while ((str = fgets (buf, 256, f)) != NULL)
+                    {
+                      LOGE (str);
+                    }
+                  fclose (f);
+                  break;
+                }
             }
           else
             {
               ptrace (PTRACE_DETACH, cur_pid, 0, 0);
             }
         }
+      if (error)
+        break;
     }
-  return false;
+  close (fd);
+  return error != true;
 }
 
 static int
@@ -108,7 +127,8 @@ modify (const struct mem_modify_instr **instr, int count_of_instr)
           if (-1 == ptrace (PTRACE_POKEDATA, target_pid, where,
                             reinterpret_cast<void *> (ptr_size_data)))
             {
-              LOGE ("ptrace poke data fails %s\n", strerror (errno));
+              LOGE ("ptrace poke data fails %s, %d\n", strerror (errno),
+                    target_pid);
               break;
             }
         }
@@ -142,8 +162,8 @@ modify (const struct mem_modify_instr **instr, int count_of_instr)
   return count;
 }
 
-int
-mem_modify (const struct mem_modify_instr **instr, int count_of_instr)
+static int
+mem_modify_1 (const struct mem_modify_instr **instr, int count_of_instr)
 {
   pid_t forkret;
   int sv[2];
@@ -222,4 +242,37 @@ mem_modify (const struct mem_modify_instr **instr, int count_of_instr)
       return 0;
     }
   return 0;
+}
+
+int
+mem_modify (const struct mem_modify_instr **instr, int count_of_instr)
+{
+#ifdef USE_DUMPABLE
+#undef USE_DUMPABLE
+#endif // USE_DUMPABLE
+#if defined(PR_GET_DUMPABLE) && defined(PR_SET_DUMPABLE)
+#define USE_DUMPABLE
+#endif // defined(PR_GET_DUMPABLE) && defined(PR_SET_DUMPABLE)
+#ifdef USE_DUMPABLE
+  int old_dumpable = prctl (PR_GET_DUMPABLE, 0, 0, 0, 0);
+  if (old_dumpable < 0)
+    {
+      LOGE ("fails get dumpable: %s\n", strerror (errno));
+      return 0;
+    }
+  if (-1 == prctl (PR_SET_DUMPABLE, 1, 0, 0, 0))
+    {
+      LOGE ("fails set dumpable: %s\n", strerror (errno));
+      return 0;
+    }
+#endif // USE_DUMPABLE
+
+  int ret = mem_modify_1 (instr, count_of_instr);
+#ifdef USE_DUMPABLE
+  if (-1 == prctl (PR_SET_DUMPABLE, old_dumpable, 0, 0, 0))
+    {
+      LOGE ("fails restore dumpable: %s\n", strerror (errno));
+    }
+#endif // USE_DUMPABLE
+  return ret;
 }

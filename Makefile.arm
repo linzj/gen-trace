@@ -1,8 +1,9 @@
 .PHONY: all test
-NDK_PATH_SYSROOT=$(NDK_PATH)/platforms/android-14/arch-arm
-GNU_STL_PATH=$(NDK_PATH)/sources/cxx-stl/gnu-libstdc++/libs/armeabi-v7a/
-GNU_STL:=-lgnustl_static
-all:libtrace.so
+NDK_PATH_SYSROOT := $(NDK_PATH)/platforms/android-14/arch-arm
+GNU_STL_PATH := -L$(NDK_PATH)/sources/cxx-stl/gnu-libstdc++/libs/armeabi-v7a/ -L$(NDK_PATH)/sources/cxx-stl/gnu-libstdc++/4.9/libs/armeabi-v7a/thumb/
+GNU_STL_INCLUDE := -I$(NDK_PATH)/sources/cxx-stl/gnu-libstdc++/4.9/include/  -I$(NDK_PATH)/sources/cxx-stl/gnu-libstdc++/4.9/libs/armeabi/include/
+GNU_STL := -lgnustl_static
+all: libtrace.so
 TESTS := mem_modify_test \
 code_manager_impl_test \
 code_modify_test \
@@ -57,10 +58,10 @@ OBJS := $(MAIN_OBJS) \
 		\
 		$(X64_TEST_OBJS)
 
-CFLAGS := -O2 -g3 -gdwarf-4 -Wall -I. -fPIC -fvisibility=hidden -mthumb -march=armv7-a --sysroot=$(NDK_PATH_SYSROOT)
+CFLAGS := -O2 -g3 -gdwarf-4 -Wall -I. -fPIC -fvisibility=hidden -mthumb -march=armv7-a --sysroot=$(NDK_PATH_SYSROOT) $(GNU_STL_INCLUDE)
 
 LDFLAGS := -pie
-LDLIBS := -L$(GNU_STL_PATH) $(GNU_STL) -llog
+LDLIBS := $(GNU_STL_PATH) $(GNU_STL) -llog
 CC=arm-linux-androideabi-gcc
 CXX=arm-linux-androideabi-gcc
 
