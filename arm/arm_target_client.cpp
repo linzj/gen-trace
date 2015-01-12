@@ -55,6 +55,8 @@ arm_dis_client::on_instr (const char *dis_str)
                      { "pop", 3 },
                      { "ldr", 3 },
                      { "str", 3 },
+                     { "stm", 3 },
+                     { "ldm", 3 },
                      { "add", 3 },
                      { "sub", 3 },
                      { "mul", 3 },
