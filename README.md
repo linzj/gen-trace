@@ -56,20 +56,21 @@ Then connect the wrapper with you app:
 setprop wrap.you.app.package.name /data/local/tmp/wrapper
 ```
 ####CAVEATS
-1. On Android 5.0 or above, you also need to shutdown SELinux:
+1.On Android 5.0 or above, you also need to shutdown SELinux:
 ```
 setenforce 0
 ```
-2. The second argument of setprop can not exceed 32 char long. So you need to
+2.The second argument of setprop can not exceed 32 char long. So you need to
 truncate that argument to 32 chars.
-3. The generated .json file is not put an end mark into. And needed to post
+
+3.The generated .json file is not put an end mark into. And needed to post
 process. So you needs to do the following:
 ```
 python post_process.py <generated json> >trace.json
 ```
 And the post processed json file here is trace.json.
 
-4. To maximum the precision, I use nanosecond as unit. But chrome uses
+4.To maximum the precision, I use nanosecond as unit. But chrome uses
 microseconds. So the output graph may looks 1000 times longer.
 
 ##Design
