@@ -12,7 +12,8 @@ shift 2
 while [ $# -ne 0 ]
 do
   echo "module start" >> trace.config
-  echo ${1##*/}  >> trace.config
+  FILENAME=`readlink -f $1`
+  echo ${FILENAME##*/}  >> trace.config
   MY_PATH=$(dirname $0)
   readelf -sW $1 | python $MY_PATH/filter_readelf.py| c++filt  | python ${MY_PATH}/post_filter.py >> trace.config
   echo "module end" >> trace.config

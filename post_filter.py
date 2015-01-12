@@ -1,7 +1,5 @@
 import sys
 white_key_words = (
-'blink::',
-'content::',
 )
 
 black_key_words = (
@@ -40,9 +38,13 @@ def filter_file (input_file, output_file):
             continue
         if not has_white_key_word(l3):
             continue
+        function_name = l3.rstrip ()
+        left_parenthesis = function_name.find ('(')
+        if -1 != left_parenthesis:
+            function_name = function_name[:left_parenthesis]
         print >>output_file, l1.rstrip ()
         print >>output_file, l2.rstrip ()
-        print >>output_file, l3.rstrip ()
+        print >>output_file, function_name
 
 def main ():
     filter_file (sys.stdin,sys.stdout)

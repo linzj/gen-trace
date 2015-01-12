@@ -1,4 +1,4 @@
-import json, sys
+import json, sys, os
 
 name_count = {}
 threshold = 10000
@@ -29,9 +29,24 @@ def handle_file (f):
     o["traceEvents"] = reduce_array (o["traceEvents"])
     return o
 
+def is_ended (f):
+    f.seek (-2, os.SEEK_END)
+    end_2 = f.read ()
+    if end_2 != "]}":
+        return False
+    return True
+
+def write_ended (f):
+    f.write (']}')
+
 def main ():
     if len (sys.argv) != 2:
         print >>sys.stderr, "need a json file path"
+    with open (sys.argv[1], 'r') as f:
+        _is_ended = is_ended (f)
+    if not _is_ended:
+        with open (sys.argv[1], 'a') as f:
+            write_ended (f)
     with open (sys.argv[1], 'r') as f:
         o = handle_file (f)
 
