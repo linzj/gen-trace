@@ -332,30 +332,32 @@ RecordThis (CTraceStruct *c, ThreadInfo *tinfo)
 void
 DoWriteRecursive (struct Record *current)
 {
-  if (current->next_)
-    DoWriteRecursive (current->next_);
-
-  static bool needComma = false;
-  if (!needComma)
+  while (current)
     {
-      needComma = true;
+      static bool needComma = false;
+      if (!needComma)
+        {
+          needComma = true;
+        }
+      else
+        {
+          fprintf (file_to_write, ", ");
+        }
+      fprintf (file_to_write,
+               "{\"cat\":\"%s\", \"pid\":%d, \"tid\":%d, \"ts\":%" PRIu64 ", "
+               "\"ph\":\"X\", \"name\":\"%.128s\", \"dur\": %" PRIu64 "}",
+               "profile", current->pid_, current->tid_, current->start_time_,
+               current->name_, current->dur_);
+      static int flushCount = 0;
+      if (flushCount++ == 5)
+        {
+          fflush (file_to_write);
+          flushCount = 0;
+        }
+      struct Record *tmp = current;
+      current = current->next_;
+      free (tmp);
     }
-  else
-    {
-      fprintf (file_to_write, ", ");
-    }
-  fprintf (file_to_write,
-           "{\"cat\":\"%s\", \"pid\":%d, \"tid\":%d, \"ts\":%" PRIu64 ", "
-           "\"ph\":\"X\", \"name\":\"%.128s\", \"dur\": %" PRIu64 "}",
-           "profile", current->pid_, current->tid_, current->start_time_,
-           current->name_, current->dur_);
-  static int flushCount = 0;
-  if (flushCount++ == 5)
-    {
-      fflush (file_to_write);
-      flushCount = 0;
-    }
-  free (current);
 }
 
 void *
