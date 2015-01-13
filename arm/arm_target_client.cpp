@@ -1,5 +1,7 @@
 #include <string.h>
 #include <stdlib.h>
+#include <vector>
+#include <assert.h>
 #include "mem_modify.h"
 #include "arm_target_client.h"
 #include "dis.h"
@@ -19,11 +21,36 @@ extern void template_for_hook_arm_ret (void);
 
 static const int arm_byte_needed_to_modify = 12;
 static const int thumb_byte_needed_to_modify = 10;
+static const int g_max_tempoline_insert_space = 16;
+
+enum post_process_trampoline_type
+{
+  INVALID,
+  BL,
+};
+
+struct post_process_trampoline_desc
+{
+  enum post_process_trampoline_type type;
+  size_t offset;
+  intptr_t addr;
+  // type bl
+  union
+  {
+    // for bl
+    struct
+    {
+      bool is_blx;
+    } bl;
+  } un;
+};
+
+typedef std::vector<post_process_trampoline_desc> desc_vector;
 
 class arm_dis_client : public dis_client
 {
 public:
-  arm_dis_client () : is_accept_ (true) {}
+  arm_dis_client (void *code_point);
   inline bool
   is_accept ()
   {
@@ -31,18 +58,51 @@ public:
   }
 
 private:
-  virtual void on_instr (const char *);
+  virtual void on_instr (const char *, char *start, size_t s);
   virtual void on_addr (intptr_t);
+  void ensure_desc ();
+  void advance (size_t);
   bool is_accept_;
+  bool is_thumb_;
+  size_t offset_;
+  size_t modified_code_size_;
+  bool ip_appears_;
+  intptr_t last_addr_;
+  std::auto_ptr<desc_vector> desc_;
+  friend class arm_target_client;
 };
 
-void
-arm_dis_client::on_instr (const char *dis_str)
+arm_dis_client::arm_dis_client (void *code_point)
+    : is_accept_ (true),
+      is_thumb_ ((reinterpret_cast<intptr_t> (code_point) & 1) != 0),
+      offset_ (0), modified_code_size_ (0), ip_appears_ (false),
+      last_addr_ (-1)
 {
-  // REMOVE PREFIX
-  if (strncmp (dis_str, "REX.W ", 6) == 0)
+}
+
+void
+arm_dis_client::ensure_desc ()
+{
+  if (desc_.get () == NULL)
     {
-      dis_str += 6;
+      desc_.reset (new desc_vector);
+    }
+}
+
+void
+arm_dis_client::advance (size_t s)
+{
+  offset_ += s;
+  modified_code_size_ += s;
+}
+
+void
+arm_dis_client::on_instr (const char *dis_str, char *start, size_t s)
+{
+  if (s + modified_code_size_ > g_max_tempoline_insert_space)
+    {
+      is_accept_ = false;
+      return;
     }
   bool check_pass = false;
   // check the instr.
@@ -69,6 +129,7 @@ arm_dis_client::on_instr (const char *dis_str)
                      { "lsl", 3 },
                      { "lsr", 3 },
                      { "asr", 3 },
+                     { "bl", 2 },
                      { "asl", 3 },
                      { "tst", 3 } };
   for (size_t i = 0; i < sizeof (check_list) / sizeof (check_list[0]); ++i)
@@ -82,16 +143,67 @@ arm_dis_client::on_instr (const char *dis_str)
   if (!check_pass)
     {
       is_accept_ = false;
+      advance (s);
       return;
     }
-  // check if rip position independent code is here.
-  if (strstr (dis_str, "pc"))
+  char *operand;
+  if ((operand = strchr (dis_str, '\t')))
     {
-      is_accept_ = false;
+      operand += 1;
+      if (strstr (operand, "ip"))
+        {
+          ip_appears_ = true;
+        }
     }
+  // check if pc position independent code is here.
+  do
+    {
+      if (strstr (dis_str, "pc"))
+        {
+          is_accept_ = false;
+        }
+      // hack on bl inst
+      else if (dis_str[0] == 'b')
+        {
+          // conditional is harder, not handle now.
+          if (ip_appears_ || dis_str[2] != '\t')
+            {
+              is_accept_ = false;
+              break;
+            }
+          // if this is a bl rx case.
+          if (strrchr (dis_str, 'r'))
+            {
+              // just copy not need to handle
+              break;
+            }
+
+          // movt, movw, blx ip
+          int offset_add_end = 4 + 4 + (is_thumb_ ? 2 : 4);
+          if ((modified_code_size_ + offset_add_end)
+              > g_max_tempoline_insert_space)
+            {
+              is_accept_ = false;
+              break;
+            }
+          ensure_desc ();
+          assert (last_addr_ != -1);
+          post_process_trampoline_desc desc = { BL, offset_, last_addr_ };
+          last_addr_ = -1;
+          desc.un.bl.is_blx = false;
+          desc_->push_back (desc);
+          modified_code_size_ += offset_add_end - s;
+        }
+    }
+  while (false);
+  advance (s);
 }
 
-void arm_dis_client::on_addr (intptr_t) {}
+void
+arm_dis_client::on_addr (intptr_t addr)
+{
+  last_addr_ = addr;
+}
 
 class arm_test_back_egde_client : public dis_client
 {
@@ -105,7 +217,7 @@ public:
   }
 
 private:
-  virtual void on_instr (const char *);
+  virtual void on_instr (const char *, char *start, size_t s);
   virtual void on_addr (intptr_t);
   bool is_accept_;
   intptr_t base_;
@@ -119,7 +231,7 @@ arm_test_back_egde_client::arm_test_back_egde_client (intptr_t base,
 }
 
 void
-arm_test_back_egde_client::on_instr (const char *)
+arm_test_back_egde_client::on_instr (const char *, char *start, size_t s)
 {
 }
 
@@ -155,9 +267,9 @@ arm_target_client::new_disassembler ()
 }
 
 dis_client *
-arm_target_client::new_code_check_client ()
+arm_target_client::new_code_check_client (void *code_point)
 {
-  return new arm_dis_client ();
+  return new arm_dis_client (code_point);
 }
 
 dis_client *
@@ -222,7 +334,7 @@ arm_target_client::template_end (intptr_t target_code_point)
 int
 arm_target_client::max_tempoline_insert_space ()
 {
-  return 16;
+  return g_max_tempoline_insert_space;
 }
 
 bool
@@ -238,6 +350,94 @@ arm_target_client::flush_code (void *code_start, int len)
   ::flush_code (code_start, len);
 }
 
+static void
+fill_thumb_movt_movw (intptr_t target, uint16_t *modify_intr_pointer, int bl)
+{
+  const uint16_t ip = 12;
+  uint16_t first, second, third, forth, fifth;
+  uint16_t lower_imm16 = (target & 0xffff);
+  uint16_t higher_imm16 = static_cast<uintptr_t> (target & 0xffff0000) >> 16;
+  // first second: movw
+  {
+    uint16_t i = (lower_imm16 & (1 << (8 + 3))) >> (8 + 3);
+    uint16_t imm8 = lower_imm16 & (0xff);
+    uint16_t imm3 = (lower_imm16 & 0x700) >> 8;
+    uint16_t imm4 = (lower_imm16 & 0xf000) >> (8 + 3 + 1);
+    first = 0x1e << 11;
+    first |= i << 10;
+    first |= 0x24 << 4;
+    first |= imm4;
+    second = imm3 << 12;
+    second |= ip << 8;
+    second |= imm8;
+    second |= 1;
+  }
+  // third forth: movt
+  {
+    uint16_t i = (higher_imm16 & (1 << (8 + 3))) >> (8 + 3);
+    uint16_t imm8 = higher_imm16 & (0xff);
+    uint16_t imm3 = (higher_imm16 & 0x700) >> 8;
+    uint16_t imm4 = (higher_imm16 & 0xf000) >> (8 + 3 + 1);
+    third = 0x1e << 11;
+    third |= i << 10;
+    third |= 0x2c << 4;
+    third |= imm4;
+    forth = imm3 << 12;
+    forth |= ip << 8;
+    forth |= imm8;
+  }
+  {
+    fifth = 0x8e << 7;
+    fifth |= ip << 3;
+  }
+  fifth ^= (fifth & (1 << 7)) ^ ((bl & 1) << 7);
+  modify_intr_pointer[0] = first;
+  modify_intr_pointer[1] = second;
+  modify_intr_pointer[2] = third;
+  modify_intr_pointer[3] = forth;
+  modify_intr_pointer[4] = fifth;
+}
+
+void
+fill_arm_movt_movw (intptr_t target, uint32_t *modify_intr_pointer, int bl)
+{
+  const uint16_t ip = 12;
+  // use movw ,movt as above.
+  uint32_t first, second, third;
+  uint32_t cond = 0xe; // always
+  uint32_t lower_imm16 = (target & 0xffff);
+  uint32_t higher_imm16 = static_cast<uintptr_t> (target & 0xffff0000) >> 16;
+  {
+    uint32_t imm4 = (lower_imm16 & 0xf000) >> 12;
+    uint32_t imm12 = 0xfff & lower_imm16;
+    first = cond << 28;
+    first |= 0x30 << 20;
+    first |= imm4 << 16;
+    first |= ip << 12;
+    first |= imm12;
+  }
+  {
+    uint32_t imm4 = (higher_imm16 & 0xf000) >> 12;
+    uint32_t imm12 = 0xfff & higher_imm16;
+    second = cond << 28;
+    second |= 0x34 << 20;
+    second |= imm4 << 16;
+    second |= ip << 12;
+    second |= imm12;
+  }
+
+  {
+    third = cond << 28;
+    third |= 0x12fff1 << 4;
+    third |= ip;
+  }
+  third ^= (third & (1 << 5)) ^ ((bl & 1) << 5);
+
+  modify_intr_pointer[0] = first;
+  modify_intr_pointer[1] = second;
+  modify_intr_pointer[2] = third;
+}
+
 mem_modify_instr *
 arm_target_client::modify_code (code_context *context)
 {
@@ -250,111 +450,133 @@ arm_target_client::modify_code (code_context *context)
   instr->size = code_len;
   intptr_t trampoline_code_start
       = reinterpret_cast<intptr_t> (context->trampoline_code_start);
-  const uint16_t ip = 12;
   if (target_code_point & 1)
     {
       // thumb mode
       uint16_t *modify_intr_pointer
           = reinterpret_cast<uint16_t *> (&instr->data[0]);
-      uint16_t first, second, third, forth, fifth;
-      uint16_t lower_imm16 = (trampoline_code_start & 0xffff);
-      uint16_t higher_imm16
-          = static_cast<uintptr_t> (trampoline_code_start & 0xffff0000) >> 16;
-      // first second: movw
-      {
-        uint16_t i = (lower_imm16 & (1 << (8 + 3))) >> (8 + 3);
-        uint16_t imm8 = lower_imm16 & (0xff);
-        uint16_t imm3 = (lower_imm16 & 0x700) >> 8;
-        uint16_t imm4 = (lower_imm16 & 0xf000) >> (8 + 3 + 1);
-        first = 0x1e << 11;
-        first |= i << 10;
-        first |= 0x24 << 4;
-        first |= imm4;
-        second = imm3 << 12;
-        second |= ip << 8;
-        second |= imm8;
-        second |= 1;
-      }
-      // third forth: movt
-      {
-        uint16_t i = (higher_imm16 & (1 << (8 + 3))) >> (8 + 3);
-        uint16_t imm8 = higher_imm16 & (0xff);
-        uint16_t imm3 = (higher_imm16 & 0x700) >> 8;
-        uint16_t imm4 = (higher_imm16 & 0xf000) >> (8 + 3 + 1);
-        third = 0x1e << 11;
-        third |= i << 10;
-        third |= 0x2c << 4;
-        third |= imm4;
-        forth = imm3 << 12;
-        forth |= ip << 8;
-        forth |= imm8;
-      }
-      {
-        fifth = 0x8e << 7;
-        fifth |= ip << 3;
-      }
-
-      modify_intr_pointer[0] = first;
-      modify_intr_pointer[1] = second;
-      modify_intr_pointer[2] = third;
-      modify_intr_pointer[3] = forth;
-      modify_intr_pointer[4] = fifth;
+      fill_thumb_movt_movw (trampoline_code_start, modify_intr_pointer, 0);
     }
   else
     {
       uint32_t *modify_intr_pointer
           = reinterpret_cast<uint32_t *> (&instr->data[0]);
-      // use movw ,movt as above.
-      uint32_t first, second, third;
-      uint32_t cond = 0xe; // always
-      uint32_t lower_imm16 = (trampoline_code_start & 0xffff);
-      uint32_t higher_imm16
-          = static_cast<uintptr_t> (trampoline_code_start & 0xffff0000) >> 16;
-      {
-        uint32_t imm4 = (lower_imm16 & 0xf000) >> 12;
-        uint32_t imm12 = 0xfff & lower_imm16;
-        first = cond << 28;
-        first |= 0x30 << 20;
-        first |= imm4 << 16;
-        first |= ip << 12;
-        first |= imm12;
-      }
-      {
-        uint32_t imm4 = (higher_imm16 & 0xf000) >> 12;
-        uint32_t imm12 = 0xfff & higher_imm16;
-        second = cond << 28;
-        second |= 0x34 << 20;
-        second |= imm4 << 16;
-        second |= ip << 12;
-        second |= imm12;
-      }
-
-      {
-        third = cond << 28;
-        third |= 0x12fff1 << 4;
-        third |= ip;
-      }
-
-      modify_intr_pointer[0] = first;
-      modify_intr_pointer[1] = second;
-      modify_intr_pointer[2] = third;
+      fill_arm_movt_movw (trampoline_code_start, modify_intr_pointer, 0);
     }
   return instr;
 }
 
+static void
+handle_bl_thumb (char *&start, char *&write, intptr_t addr, bool is_blx)
+{
+  start += 4;
+  if (!is_blx)
+    {
+      addr |= 1;
+    }
+  fill_thumb_movt_movw (addr, reinterpret_cast<uint16_t *> (write), 1);
+  write += thumb_byte_needed_to_modify;
+}
+
+static void
+handle_thumb_entry (post_process_trampoline_desc &desc, char *&start,
+                    char *&write)
+{
+  switch (desc.type)
+    {
+    case BL:
+      handle_bl_thumb (start, write, desc.addr, desc.un.bl.is_blx);
+      break;
+    default:
+      assert (false);
+    }
+}
+
+static void
+handle_bl_arm (char *&start, char *&write, intptr_t addr, bool is_blx)
+{
+  start += 4;
+  fill_arm_movt_movw (addr, reinterpret_cast<uint32_t *> (write), 1);
+  write += arm_byte_needed_to_modify;
+}
+
+static void
+handle_arm_entry (post_process_trampoline_desc &desc, char *&start,
+                  char *&write)
+{
+  switch (desc.type)
+    {
+    case BL:
+      handle_bl_arm (start, write, desc.addr, desc.un.bl.is_blx);
+      break;
+    default:
+      assert (false);
+    }
+}
+
 void
 arm_target_client::copy_original_code (void *trampoline_code_start,
-                                       void *target_code_point, int len)
+                                       void *target_code_point, int len,
+                                       code_context *context)
 {
-  intptr_t target_code_point_i
-      = reinterpret_cast<intptr_t> (target_code_point);
-  target_code_point_i &= static_cast<intptr_t> (~1);
-  memcpy (trampoline_code_start,
-          reinterpret_cast<void *> (target_code_point_i), len);
+
+  desc_vector *descs = static_cast<desc_vector *> (context->machine_defined2);
+  if (!descs)
+    {
+      intptr_t target_code_point_i
+          = reinterpret_cast<intptr_t> (target_code_point);
+      target_code_point_i &= static_cast<intptr_t> (~1);
+      memcpy (trampoline_code_start,
+              reinterpret_cast<void *> (target_code_point_i), len);
+      return;
+    }
+  assert (descs->empty () == false);
+  char *_target_code_point = reinterpret_cast<char *> (
+      reinterpret_cast<intptr_t> (target_code_point) & ~1UL);
+
+  char *start = _target_code_point;
+  char *write = static_cast<char *> (trampoline_code_start);
+  bool is_thumb = (reinterpret_cast<intptr_t> (target_code_point) & 1) != 0;
+  for (desc_vector::iterator i = descs->begin (); i != descs->end (); ++i)
+    {
+      char *end = _target_code_point + i->offset;
+      memcpy (write, start, reinterpret_cast<int> (end - start));
+      write += reinterpret_cast<int> (end - start);
+      start = end;
+      if (is_thumb)
+        {
+          handle_thumb_entry (*i, start, write);
+        }
+      else
+        {
+          handle_arm_entry (*i, start, write);
+        }
+    }
+  memcpy (write, start,
+          reinterpret_cast<int> (_target_code_point + len - start));
 }
 
 bool
 arm_target_client::use_target_code_point_as_hint (void)
 {
   return false;
+}
+
+bool
+arm_target_client::build_machine_define2 (code_context *context,
+                                          dis_client *code_check_client)
+{
+  arm_dis_client *real_client
+      = static_cast<arm_dis_client *> (code_check_client);
+  context->machine_defined2 = real_client->desc_.release ();
+  return true;
+}
+
+void
+arm_target_client::release_machine_define2 (code_context *context)
+{
+  if (context->machine_defined2)
+    {
+      delete static_cast<desc_vector *> (context->machine_defined2);
+    }
 }

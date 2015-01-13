@@ -34,19 +34,14 @@ public:
   }
 
 private:
-  virtual void on_instr (const char *);
+  virtual void on_instr (const char *, char *start, size_t s);
   virtual void on_addr (intptr_t);
   bool is_accept_;
 };
 
 void
-x64_dis_client::on_instr (const char *dis_str)
+x64_dis_client::on_instr (const char *dis_str, char *start, size_t s)
 {
-  // REMOVE PREFIX
-  if (strncmp (dis_str, "REX.W ", 6) == 0)
-    {
-      dis_str += 6;
-    }
   bool check_pass = false;
   // check the instr.
   struct
@@ -105,7 +100,7 @@ public:
   }
 
 private:
-  virtual void on_instr (const char *);
+  virtual void on_instr (const char *, char *start, size_t s);
   virtual void on_addr (intptr_t);
   bool is_accept_;
   intptr_t base_;
@@ -119,7 +114,7 @@ x64_test_back_egde_client::x64_test_back_egde_client (intptr_t base,
 }
 
 void
-x64_test_back_egde_client::on_instr (const char *)
+x64_test_back_egde_client::on_instr (const char *, char *start, size_t s)
 {
 }
 
@@ -172,7 +167,7 @@ x64_target_client::new_disassembler ()
 }
 
 dis_client *
-x64_target_client::new_code_check_client ()
+x64_target_client::new_code_check_client (void *)
 {
   return new x64_dis_client ();
 }
@@ -225,7 +220,8 @@ x64_target_client::flush_code (void *, int)
 
 void
 x64_target_client::copy_original_code (void *trampoline_code_start,
-                                       void *target_code_point, int len)
+                                       void *target_code_point, int len,
+                                       code_context *)
 {
   memcpy (trampoline_code_start, target_code_point, len);
 }

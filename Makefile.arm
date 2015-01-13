@@ -54,9 +54,9 @@ OBJS := $(MAIN_OBJS) \
 		\
 		$(MAIN_TEST_OBJS) \
 		\
-		$(X64_MAIN_OBJS) \
+		$(ARM_MAIN_OBJS) \
 		\
-		$(X64_TEST_OBJS)
+		$(ARM_TEST_OBJS)
 
 CFLAGS := -O2 -g3 -gdwarf-4 -Wall -I. -fPIC -fvisibility=hidden -mthumb -march=armv7-a --sysroot=$(NDK_PATH_SYSROOT) $(GNU_STL_INCLUDE)
 
@@ -69,19 +69,19 @@ CXX=arm-linux-androideabi-gcc
 
 %.o: %.c
 	$(CC) $(CFLAGS) -c $*.c -o $*.o
-	$(CC) -MM $(CFLAGS) $*.c > $*.d
+	$(CC) -MM -MT $*.o $(CFLAGS) $*.c > $*.d
 
 %.o: %.cpp
 	$(CXX) $(CFLAGS) -c $*.cpp -o $*.o
-	$(CXX) -MM $(CFLAGS) $*.cpp > $*.d
+	$(CXX) -MM -MT $*.o $(CFLAGS) $*.cpp > $*.d
 
 %.o: %.S
 	$(CXX) $(CFLAGS) -c $*.S -o $*.o
-	$(CXX) -MM $(CFLAGS) $*.S > $*.d
+	$(CXX) -MM -MT $*.o $(CFLAGS) $*.S > $*.d
 
 arm/hook_template_test_arm.o: arm/hook_template_test.cpp
 	$(CC) $(CFLAGS) -marm -c $^ -o $*.o
-	$(CC) -MM $(CFLAGS) $^ > $*.d
+	$(CC) -MM -MT $*.o $(CFLAGS) $^ > $*.d
 
 mem_modify_test: mem_modify_test.o log.o mem_modify.o
 	$(CXX) $(LDFLAGS) -o $@ $^ $(LDLIBS)

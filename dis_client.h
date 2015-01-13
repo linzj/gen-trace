@@ -5,7 +5,7 @@ class dis_client
 {
 public:
   virtual ~dis_client ();
-  virtual void on_instr (const char *) = 0;
+  virtual void on_instr (const char *, char *start, size_t s) = 0;
   virtual void on_addr (intptr_t) = 0;
   virtual bool is_accept () = 0;
 };

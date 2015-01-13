@@ -58,15 +58,15 @@ LDLIBS := -lpthread -lrt
 
 %.o: %.c
 	gcc $(CFLAGS) -c $*.c -o $*.o
-	gcc -MM $(CFLAGS) $*.c > $*.d
+	gcc -MM -MT $*.o $(CFLAGS) $*.c > $*.d
 
 %.o: %.cpp
 	g++ $(CFLAGS) -c $*.cpp -o $*.o
-	g++ -MM $(CFLAGS) $*.cpp > $*.d
+	g++ -MM -MT $*.o $(CFLAGS) $*.cpp > $*.d
 
 %.o: %.S
 	g++ $(CFLAGS) -c $*.S -o $*.o
-	g++ -MM $(CFLAGS) $*.S > $*.d
+	g++ -MM -MT $*.o $(CFLAGS) $*.S > $*.d
 
 mem_modify_test: mem_modify_test.o log.o mem_modify.o
 	g++ $(LDFLAGS) -o $@ $^ $(LDLIBS)

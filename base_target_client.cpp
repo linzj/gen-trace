@@ -28,7 +28,8 @@ base_target_client::check_code (void *code_point, const char *name,
                                 int code_size, code_manager *m,
                                 code_context **ppcontext)
 {
-  std::auto_ptr<dis_client> code_check_client (new_code_check_client ());
+  std::auto_ptr<dis_client> code_check_client (
+      new_code_check_client (code_point));
   std::auto_ptr<disassembler> dis (new_disassembler ());
   dis->set_client (code_check_client.get ());
   int _byte_needed_to_modify
@@ -64,14 +65,37 @@ base_target_client::check_code (void *code_point, const char *name,
   context->code_point = code_point;
   context->machine_defined = reinterpret_cast<void *> (current);
   *ppcontext = context;
+  if (!build_machine_define2 (context, code_check_client.get ()))
+    {
+      return check_code_build_machine_define2;
+    }
   return check_code_okay;
 }
+
+class release_machine_define2_helper
+{
+public:
+  release_machine_define2_helper (code_context *context,
+                                  base_target_client *client)
+      : context_ (context), client_ (client)
+  {
+  }
+  ~release_machine_define2_helper ()
+  {
+    client_->release_machine_define2 (context_);
+  }
+
+private:
+  code_context *context_;
+  base_target_client *client_;
+};
 
 target_client::build_trampoline_status
 base_target_client::build_trampoline (code_manager *m, code_context *context,
                                       pfn_called_callback called_callback,
                                       pfn_ret_callback return_callback)
 {
+  release_machine_define2_helper _dummy (context, this);
   const intptr_t target_code_point
       = reinterpret_cast<intptr_t> (context->code_point);
   char *const _template_start = template_start (target_code_point);
@@ -115,7 +139,7 @@ base_target_client::build_trampoline (code_manager *m, code_context *context,
                      - max_tempoline_insert_space ();
 
   int code_len = reinterpret_cast<intptr_t> (context->machine_defined);
-  copy_original_code (copy_start, context->code_point, code_len);
+  copy_original_code (copy_start, context->code_point, code_len, context);
   context->called_callback = called_callback;
   context->return_callback = return_callback;
   const char *function_name = context->function_name;
@@ -135,4 +159,18 @@ bool
 base_target_client::use_target_code_point_as_hint (void)
 {
   return true;
+}
+
+bool
+base_target_client::build_machine_define2 (code_context *context,
+                                           dis_client *code_check_client)
+{
+  context->machine_defined2 = reinterpret_cast<void *> (-1);
+  return true;
+}
+
+void
+base_target_client::release_machine_define2 (code_context *context)
+{
+  context->machine_defined2 = NULL;
 }

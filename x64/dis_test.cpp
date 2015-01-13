@@ -12,7 +12,7 @@ public:
 
 private:
   void
-  on_instr (const char *instr)
+  on_instr (const char *instr, char *start, size_t s)
   {
     LOGI ("%s\n", instr);
     s_.assign (instr);

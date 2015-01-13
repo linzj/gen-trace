@@ -24,7 +24,7 @@ public:
       __attribute__ ((__format__ (__printf__, 2, 3)))
       __attribute__ ((__nonnull__ (2)));
   static void print_address (bfd_vma addr, struct disassemble_info *dinfo);
-  void flush ();
+  void flush (char *start, size_t s);
 };
 
 int
@@ -42,9 +42,9 @@ Disassembler::DisassemblerImpl::_fprintf_ (void *stream, const char *fmt, ...)
 }
 
 void
-Disassembler::DisassemblerImpl::flush ()
+Disassembler::DisassemblerImpl::flush (char *start, size_t s)
 {
-  client_->on_instr (buf_);
+  client_->on_instr (buf_, start, s);
   pos_ = buf_;
   pos_[0] = '\0';
 }
@@ -102,7 +102,7 @@ Disassembler::instruction_decode (char *start)
                                       &impl_->info_);
   if (impl_->pos_ != &impl_->buf_[0])
     {
-      impl_->flush ();
+      impl_->flush (start, octets);
     }
   return octets;
 }

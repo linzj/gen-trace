@@ -11,7 +11,7 @@ public:
 private:
   virtual int byte_needed_to_modify (intptr_t target_code_point);
   virtual disassembler *new_disassembler ();
-  virtual dis_client *new_code_check_client ();
+  virtual dis_client *new_code_check_client (void *);
   virtual dis_client *new_backedge_check_client (intptr_t base,
                                                  intptr_t hookend);
   virtual char *template_start (intptr_t target_code_point);
@@ -22,9 +22,13 @@ private:
                                 intptr_t trampoline_code_start);
   virtual void flush_code (void *code_start, int len);
   virtual void copy_original_code (void *trampoline_code_start,
-                                   void *target_code_point, int len);
+                                   void *target_code_point, int len,
+                                   code_context *context);
   virtual mem_modify_instr *modify_code (code_context *);
   virtual bool use_target_code_point_as_hint (void);
+  virtual bool build_machine_define2 (code_context *context,
+                                      dis_client *code_check_client);
+  virtual void release_machine_define2 (code_context *context);
 };
 
 #endif /* ARM_TARGET_CLIENT_H */

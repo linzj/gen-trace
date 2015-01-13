@@ -19,6 +19,9 @@ struct code_context
   void *trampoline_code_end;
   pfn_called_callback called_callback;
   pfn_ret_callback return_callback;
+  // This field is record the data by check code procedure,
+  // and released after build_trampoline.
+  void *machine_defined2;
 };
 
 class code_manager
@@ -42,6 +45,7 @@ public:
     check_code_back_edge,
     check_code_too_small,
     check_code_memory,
+    check_code_build_machine_define2,
   };
   enum build_trampoline_status
   {
