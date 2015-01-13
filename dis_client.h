@@ -1,5 +1,6 @@
 #ifndef DIS_CLIENT_H
 #define DIS_CLIENT_H
+#include <stddef.h>
 #include <stdint.h>
 class dis_client
 {

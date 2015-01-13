@@ -100,7 +100,7 @@ Disassembler::instruction_decode (char *start)
       = print_insn_i386 (reinterpret_cast<bfd_vma> (start), &impl_->info_);
   if (impl_->pos_ != &impl_->buf_[0])
     {
-      impl_->flush ();
+      impl_->flush (start, octets);
     }
   return octets;
 }
