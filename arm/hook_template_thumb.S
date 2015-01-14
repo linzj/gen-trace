@@ -29,21 +29,7 @@ template_for_hook_thumb:
   ldr ip, .Lhook_function
   blx ip
   pop.w {r0-r12, lr}
-  nop
-  nop
-  nop
-  nop
-  nop
-  nop
-  nop
-  nop
-.global template_for_hook_thumb_ret
-.hidden template_for_hook_thumb_ret
-.thumb_func
-.type	template_for_hook_thumb_ret, %function
-template_for_hook_thumb_ret:
-  ldr pc, .Ljump_back
-  nop
+  b template_for_hook_thumb_end
 .Lret:
   push {r0-r3}
   ldr ip, .Lret_jump

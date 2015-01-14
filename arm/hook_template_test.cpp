@@ -16,11 +16,9 @@ extern "C" {
 #ifdef __thumb__
 extern void template_for_hook_thumb (void);
 extern void template_for_hook_thumb_end (void);
-extern void template_for_hook_thumb_ret (void);
 #else
 extern void template_for_hook_arm (void);
 extern void template_for_hook_arm_end (void);
-extern void template_for_hook_arm_ret (void);
 #endif
 }
 
@@ -56,6 +54,28 @@ original_function (int a, int b, int c, int d, int e, int f, int g)
   return "nimabi";
 }
 
+static void
+add_jump_to_original (char *code_start, int offset, bool is_thumb)
+{
+  if (is_thumb)
+    {
+      uint16_t *data = reinterpret_cast<uint16_t *> (code_start);
+      data[0] = 0xf85f;
+      offset -= 4;
+      offset = -offset;
+      LOGI ("offset = %d\n", offset);
+      data[1] = ((0xf) << 12) | offset;
+    }
+  else
+    {
+      uint32_t *data = reinterpret_cast<uint32_t *> (code_start);
+      offset -= 8;
+      offset = -offset;
+      LOGI ("offset = %d\n", offset);
+      data[0] = 0xe51ff000 | offset;
+    }
+}
+
 int
 main ()
 {
@@ -74,30 +94,28 @@ main ()
   modify_pointer[2] = reinterpret_cast<void *> (original_function);
   modify_pointer[3] = reinterpret_cast<void *> (ret_hook);
 #ifdef __thumb__
-  char *template_for_hook2 = (char *)template_for_hook_thumb_ret;
   char *template_for_hook_end = (char *)template_for_hook_thumb_end;
   char *template_for_hook = (char *)template_for_hook_thumb;
+  bool is_thumb = true;
 #else
-  char *template_for_hook2 = (char *)template_for_hook_arm_ret;
   char *template_for_hook_end = (char *)template_for_hook_arm_end;
   char *template_for_hook = (char *)template_for_hook_arm;
+  bool is_thumb = false;
 #endif
-  static const int template_size2 = (char *)template_for_hook_end
-                                    - (char *)template_for_hook2;
-  static const int template_size1 = (char *)template_for_hook2
-                                    - (char *)template_for_hook;
-  intptr_t template_for_hook_addr = ((intptr_t)template_for_hook) & -2;
-  memcpy (&modify_pointer[4], (char *)template_for_hook_addr,
-          template_size1 + template_size2);
-  // memcpy ((char *)&modify_pointer[4] + template_size1,
-  //         (char *)template_for_hook2, template_size2);
+  static const int template_size = (char *)template_for_hook_end
+                                   - (char *)template_for_hook;
+  intptr_t template_for_hook_addr = ((intptr_t)template_for_hook) & ~1UL;
+  memcpy (&modify_pointer[4], (char *)template_for_hook_addr, template_size);
+  add_jump_to_original (static_cast<char *> (code_page) + template_size
+                            + sizeof (intptr_t) * 4,
+                        -(template_size + sizeof (intptr_t) * 2), is_thumb);
   typedef const char *(*pfn)(int a, int b, int c, int d, int e, int f, int g);
   intptr_t myfunc1 = reinterpret_cast<intptr_t> (&modify_pointer[4]);
-  myfunc1 += 1;
+  if (is_thumb)
+    myfunc1 += 1;
   pfn myfunc = (pfn)myfunc1;
-  flush_code (code_page, template_size2 + template_size1);
-  printf ("linzj::template_for_hook is %p, template_for_hook2 is %p\n",
-          template_for_hook, template_for_hook2);
+  flush_code (code_page, template_size);
+  printf ("linzj::template_for_hook is %p\n", template_for_hook);
   assert (0 == strcmp ((*myfunc)(0, 1, 2, 3, 4, 5, 6), "nimabi"));
   return 0;
 }

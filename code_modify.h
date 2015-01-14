@@ -9,8 +9,13 @@ typedef void *(*pfn_ret_callback)(const char *name);
 struct code_context
 {
   const char *function_name;
-  // machine relavant.
-  void *machine_defined;
+  // code_len_to_replace describes the len of code
+  // is to be overwrited. It is not necessity equals
+  // to lowered_original_code_len, which is a lowered
+  // version of original code. Lowered means find the
+  // other way to interpret.
+  int code_len_to_replace;
+  int lowered_original_code_len;
   // the code point.
   // FIXME: needs to rename to target_code_point.
   void *code_point;

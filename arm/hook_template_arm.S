@@ -27,16 +27,7 @@ template_for_hook_arm:
   ldr ip, .Lhook_function
   blx ip
   pop {r0-r12, lr}
-  nop
-  nop
-  nop
-  nop
-.global template_for_hook_arm_ret
-.hidden template_for_hook_arm_ret
-.type	template_for_hook_arm_ret, %function
-template_for_hook_arm_ret:
-  ldr pc, .Ljump_back
-  nop
+  b template_for_hook_arm_end
 .Lret:
   push {r0-r3}
   ldr ip, .Lret_jump

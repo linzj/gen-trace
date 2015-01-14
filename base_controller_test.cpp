@@ -16,11 +16,11 @@ static const char *test_lines[] = {
 #elif defined(__arm__)
 static const char *test_lines[] = {
   "here\n", "0\n", "module start\n", "libbase_controller_test_lib.so\n",
-  "00000359\n", "348\n", "original_function\n", "module end\n",
+  "c85\n", "348\n", "original_function\n", "module end\n",
 };
 static const char *test_lines2[] = {
   "herearm\n", "0\n", "module start\n", "libbase_controller_test_lib_arm.so\n",
-  "00000358\n", "564\n", "original_function\n", "module end\n",
+  "c84\n", "564\n", "original_function\n", "module end\n",
 };
 
 class test_fp_line_client_arm : public fp_line_client

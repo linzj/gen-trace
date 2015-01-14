@@ -10,4 +10,10 @@ public:
   virtual void on_addr (intptr_t) = 0;
   virtual bool is_accept () = 0;
 };
+
+class check_code_dis_client : public dis_client
+{
+public:
+  virtual int lowered_original_code_len (int code_len_to_replace) = 0;
+};
 #endif /* DIS_CLIENT_H */

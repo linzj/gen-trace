@@ -12,16 +12,13 @@
 extern "C" {
 extern void template_for_hook_thumb (void);
 extern void template_for_hook_thumb_end (void);
-extern void template_for_hook_thumb_ret (void);
 
 extern void template_for_hook_arm (void);
 extern void template_for_hook_arm_end (void);
-extern void template_for_hook_arm_ret (void);
 }
 
 static const int arm_byte_needed_to_modify = 12;
 static const int thumb_byte_needed_to_modify = 10;
-static const int g_max_tempoline_insert_space = 16;
 
 enum post_process_trampoline_type
 {
@@ -47,7 +44,7 @@ struct post_process_trampoline_desc
 
 typedef std::vector<post_process_trampoline_desc> desc_vector;
 
-class arm_dis_client : public dis_client
+class arm_dis_client : public check_code_dis_client
 {
 public:
   arm_dis_client (void *code_point);
@@ -60,12 +57,13 @@ public:
 private:
   virtual void on_instr (const char *, char *start, size_t s);
   virtual void on_addr (intptr_t);
+  virtual int lowered_original_code_len (int);
   void ensure_desc ();
   void advance (size_t);
   bool is_accept_;
   bool is_thumb_;
   size_t offset_;
-  size_t modified_code_size_;
+  size_t lowered_original_code_len_;
   bool ip_appears_;
   intptr_t last_addr_;
   std::auto_ptr<desc_vector> desc_;
@@ -75,7 +73,7 @@ private:
 arm_dis_client::arm_dis_client (void *code_point)
     : is_accept_ (true),
       is_thumb_ ((reinterpret_cast<intptr_t> (code_point) & 1) != 0),
-      offset_ (0), modified_code_size_ (0), ip_appears_ (false),
+      offset_ (0), lowered_original_code_len_ (0), ip_appears_ (false),
       last_addr_ (-1)
 {
 }
@@ -93,17 +91,12 @@ void
 arm_dis_client::advance (size_t s)
 {
   offset_ += s;
-  modified_code_size_ += s;
+  lowered_original_code_len_ += s;
 }
 
 void
 arm_dis_client::on_instr (const char *dis_str, char *start, size_t s)
 {
-  if (s + modified_code_size_ > g_max_tempoline_insert_space)
-    {
-      is_accept_ = false;
-      return;
-    }
   bool check_pass = false;
   // check the instr.
   struct
@@ -180,19 +173,13 @@ arm_dis_client::on_instr (const char *dis_str, char *start, size_t s)
 
           // movt, movw, blx ip
           int offset_add_end = 4 + 4 + (is_thumb_ ? 2 : 4);
-          if ((modified_code_size_ + offset_add_end)
-              > g_max_tempoline_insert_space)
-            {
-              is_accept_ = false;
-              break;
-            }
           ensure_desc ();
           assert (last_addr_ != -1);
           post_process_trampoline_desc desc = { BL, offset_, last_addr_ };
           last_addr_ = -1;
           desc.un.bl.is_blx = false;
           desc_->push_back (desc);
-          modified_code_size_ += offset_add_end - s;
+          lowered_original_code_len_ += offset_add_end - s;
         }
     }
   while (false);
@@ -203,6 +190,12 @@ void
 arm_dis_client::on_addr (intptr_t addr)
 {
   last_addr_ = addr;
+}
+
+int
+arm_dis_client::lowered_original_code_len (int)
+{
+  return lowered_original_code_len_;
 }
 
 class arm_test_back_egde_client : public dis_client
@@ -266,7 +259,7 @@ arm_target_client::new_disassembler ()
   return new disasm::Disassembler ();
 }
 
-dis_client *
+check_code_dis_client *
 arm_target_client::new_code_check_client (void *code_point)
 {
   return new arm_dis_client (code_point);
@@ -301,22 +294,6 @@ arm_target_client::template_start (intptr_t target_code_point)
 }
 
 char *
-arm_target_client::template_ret_start (intptr_t target_code_point)
-{
-  intptr_t r;
-  if (target_code_point & 1)
-    {
-      r = (intptr_t)template_for_hook_thumb_ret;
-    }
-  else
-    {
-      r = (intptr_t)template_for_hook_arm_ret;
-    }
-  r &= static_cast<intptr_t> (~1);
-  return (char *)r;
-}
-
-char *
 arm_target_client::template_end (intptr_t target_code_point)
 {
   if (target_code_point & 1)
@@ -329,12 +306,6 @@ arm_target_client::template_end (intptr_t target_code_point)
     {
       return (char *)template_for_hook_arm_end;
     }
-}
-
-int
-arm_target_client::max_tempoline_insert_space ()
-{
-  return g_max_tempoline_insert_space;
 }
 
 bool
@@ -443,11 +414,11 @@ arm_target_client::modify_code (code_context *context)
 {
   const intptr_t target_code_point
       = reinterpret_cast<intptr_t> (context->code_point);
-  int code_len = reinterpret_cast<intptr_t> (context->machine_defined);
+  int code_len_to_replace = context->code_len_to_replace;
   mem_modify_instr *instr = static_cast<mem_modify_instr *> (
-      malloc (sizeof (mem_modify_instr) + code_len - 1));
+      malloc (sizeof (mem_modify_instr) + code_len_to_replace - 1));
   instr->where = (void *)(target_code_point & static_cast<intptr_t> (~1));
-  instr->size = code_len;
+  instr->size = code_len_to_replace;
   intptr_t trampoline_code_start
       = reinterpret_cast<intptr_t> (context->trampoline_code_start);
   if (target_code_point & 1)
@@ -516,10 +487,10 @@ handle_arm_entry (post_process_trampoline_desc &desc, char *&start,
 
 void
 arm_target_client::copy_original_code (void *trampoline_code_start,
-                                       void *target_code_point, int len,
                                        code_context *context)
 {
-
+  void *target_code_point = context->code_point;
+  int len = context->code_len_to_replace;
   desc_vector *descs = static_cast<desc_vector *> (context->machine_defined2);
   if (!descs)
     {
@@ -579,4 +550,33 @@ arm_target_client::release_machine_define2 (code_context *context)
     {
       delete static_cast<desc_vector *> (context->machine_defined2);
     }
+}
+
+void
+arm_target_client::add_jump_to_original (char *code_start, int offset,
+                                         code_context *code_context)
+{
+  if (reinterpret_cast<intptr_t> (code_context->code_point) & 1)
+    {
+      uint16_t *data = reinterpret_cast<uint16_t *> (code_start);
+      data[0] = 0xf85f;
+      offset -= 4;
+      offset = -offset;
+      // 4 byte align.
+      offset &= ~(4UL - 1UL);
+      data[1] = ((0xf) << 12) | offset;
+    }
+  else
+    {
+      uint32_t *data = reinterpret_cast<uint32_t *> (code_start);
+      offset -= 8;
+      offset = -offset;
+      data[0] = 0xe51ff000 | offset;
+    }
+}
+
+int
+arm_target_client::jump_back_instr_len (code_context *)
+{
+  return 4;
 }

@@ -1,6 +1,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <stdint.h>
+#include <assert.h>
 
 #include "x64_target_client.h"
 #include "dis.h"
@@ -23,7 +24,7 @@ const static int byte_needed_to_modify_const = 5;
 x64_target_client::x64_target_client () {}
 x64_target_client::~x64_target_client () {}
 
-class x64_dis_client : public dis_client
+class x64_dis_client : public check_code_dis_client
 {
 public:
   x64_dis_client () : is_accept_ (true) {}
@@ -36,6 +37,7 @@ public:
 private:
   virtual void on_instr (const char *, char *start, size_t s);
   virtual void on_addr (intptr_t);
+  virtual int lowered_original_code_len (int code_len_to_replace);
   bool is_accept_;
 };
 
@@ -88,6 +90,12 @@ x64_dis_client::on_instr (const char *dis_str, char *start, size_t s)
 
 void x64_dis_client::on_addr (intptr_t) {}
 
+int
+x64_dis_client::lowered_original_code_len (int code_len_to_replace)
+{
+  return code_len_to_replace;
+}
+
 class x64_test_back_egde_client : public dis_client
 {
 public:
@@ -132,13 +140,13 @@ x64_target_client::modify_code (code_context *context)
 {
   const intptr_t target_code_point
       = reinterpret_cast<intptr_t> (context->code_point);
-  int code_len = reinterpret_cast<intptr_t> (context->machine_defined);
+  int code_len_to_replace = context->code_len_to_replace;
   mem_modify_instr *instr = static_cast<mem_modify_instr *> (
-      malloc (sizeof (mem_modify_instr) + code_len - 1));
+      malloc (sizeof (mem_modify_instr) + code_len_to_replace - 1));
   instr->where = context->code_point;
-  instr->size = code_len;
+  instr->size = code_len_to_replace;
   char *modify_intr_pointer = reinterpret_cast<char *> (&instr->data[0]);
-  memset (modify_intr_pointer, 0x90, code_len);
+  memset (modify_intr_pointer, 0x90, code_len_to_replace);
   modify_intr_pointer[0] = 0xe9;
   intptr_t jump_dist
       = reinterpret_cast<intptr_t> (context->trampoline_code_start)
@@ -151,7 +159,6 @@ x64_target_client::modify_code (code_context *context)
 
 extern "C" {
 extern void template_for_hook (void);
-extern void template_for_hook2 (void);
 extern void template_for_hook_end (void);
 }
 
@@ -166,7 +173,7 @@ x64_target_client::new_disassembler ()
   return new disasm::Disassembler ();
 }
 
-dis_client *
+check_code_dis_client *
 x64_target_client::new_code_check_client (void *)
 {
   return new x64_dis_client ();
@@ -183,20 +190,9 @@ char *x64_target_client::template_start (intptr_t)
   return (char *)template_for_hook;
 }
 
-char *x64_target_client::template_ret_start (intptr_t)
-{
-  return (char *)template_for_hook2;
-}
-
 char *x64_target_client::template_end (intptr_t)
 {
   return (char *)template_for_hook_end;
-}
-
-int
-x64_target_client::max_tempoline_insert_space ()
-{
-  return 16;
 }
 
 bool
@@ -220,8 +216,25 @@ x64_target_client::flush_code (void *, int)
 
 void
 x64_target_client::copy_original_code (void *trampoline_code_start,
-                                       void *target_code_point, int len,
-                                       code_context *)
+                                       code_context *context)
 {
+  void *target_code_point = context->code_point;
+  int len = context->code_len_to_replace;
   memcpy (trampoline_code_start, target_code_point, len);
+}
+
+void
+x64_target_client::add_jump_to_original (char *code_start, int offset,
+                                         code_context *code_context)
+{
+  offset -= 6;
+  code_start[0] = 0xff;
+  code_start[1] = 0x25;
+  memcpy (code_start + 2, &offset, 4);
+}
+
+int
+x64_target_client::jump_back_instr_len (code_context *)
+{
+  return 6;
 }

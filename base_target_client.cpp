@@ -28,7 +28,7 @@ base_target_client::check_code (void *code_point, const char *name,
                                 int code_size, code_manager *m,
                                 code_context **ppcontext)
 {
-  std::auto_ptr<dis_client> code_check_client (
+  std::auto_ptr<check_code_dis_client> code_check_client (
       new_code_check_client (code_point));
   std::auto_ptr<disassembler> dis (new_disassembler ());
   dis->set_client (code_check_client.get ());
@@ -48,10 +48,6 @@ base_target_client::check_code (void *code_point, const char *name,
     {
       return check_code_not_accept;
     }
-  if (current > max_tempoline_insert_space ())
-    {
-      return check_code_exceed_trampoline;
-    }
   if (!check_for_back_edge (dis.get (), static_cast<char *> (code_point),
                             start,
                             static_cast<char *> (code_point) + code_size))
@@ -63,7 +59,9 @@ base_target_client::check_code (void *code_point, const char *name,
   if (context == NULL)
     return check_code_memory;
   context->code_point = code_point;
-  context->machine_defined = reinterpret_cast<void *> (current);
+  context->code_len_to_replace = current;
+  context->lowered_original_code_len
+      = code_check_client->lowered_original_code_len (current);
   *ppcontext = context;
   if (!build_machine_define2 (context, code_check_client.get ()))
     {
@@ -99,10 +97,10 @@ base_target_client::build_trampoline (code_manager *m, code_context *context,
   const intptr_t target_code_point
       = reinterpret_cast<intptr_t> (context->code_point);
   char *const _template_start = template_start (target_code_point);
-  char *const _template_ret_start = template_ret_start (target_code_point);
   char *const _template_end = template_end (target_code_point);
-  const int template_code_size = (char *)_template_end
-                                 - (char *)_template_start;
+  const int template_code_size
+      = (char *)_template_end - (char *)_template_start
+        + context->lowered_original_code_len + jump_back_instr_len (context);
   int template_size = template_code_size + sizeof (intptr_t) * 4;
   template_size = (template_size + sizeof (intptr_t) - 1)
                   & ~(sizeof (intptr_t) - 1);
@@ -131,26 +129,33 @@ base_target_client::build_trampoline (code_manager *m, code_context *context,
   context->trampoline_code_end = reinterpret_cast<char *> (code_start)
                                  + template_code_size;
   // copy the hook template to code mem.
+  const int template_code_size_no_copy = (char *)_template_end
+                                         - (char *)_template_start;
   memcpy (reinterpret_cast<void *> (code_start), (char *)_template_start,
-          template_code_size);
+          template_code_size_no_copy);
+
   // copy the original target code to trampoline
   char *copy_start = reinterpret_cast<char *> (code_start)
-                     + (_template_ret_start - _template_start)
-                     - max_tempoline_insert_space ();
+                     + template_code_size_no_copy;
 
-  int code_len = reinterpret_cast<intptr_t> (context->machine_defined);
-  copy_original_code (copy_start, context->code_point, code_len, context);
+  copy_original_code (copy_start, context);
+  int lowered_original_code_len = context->lowered_original_code_len;
+  add_jump_to_original (copy_start + lowered_original_code_len,
+                        -(lowered_original_code_len
+                          + template_code_size_no_copy
+                          + sizeof (intptr_t) * 2),
+                        context);
   context->called_callback = called_callback;
   context->return_callback = return_callback;
   const char *function_name = context->function_name;
   const void **modify_pointer
       = static_cast<const void **> (context->trampoline_code_start);
-  int modified_code_len = code_len;
   modify_pointer[-4] = function_name;
   modify_pointer[-3] = (void *)called_callback;
-  modify_pointer[-2]
-      = reinterpret_cast<void *> (target_code_point + modified_code_len);
+  modify_pointer[-2] = reinterpret_cast<void *> (
+      target_code_point + context->code_len_to_replace);
   modify_pointer[-1] = (void *)return_callback;
+
   flush_code (code_mem, template_size);
   return build_trampoline_okay;
 }

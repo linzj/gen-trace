@@ -9,7 +9,6 @@
 
 extern "C" {
 extern void template_for_hook (void);
-extern void template_for_hook2 (void);
 extern void template_for_hook_end (void);
 }
 
@@ -45,6 +44,15 @@ original_function (int a, int b, int c, int d, int e, int f, int g)
   return "nimabi";
 }
 
+static void
+add_jump_to_original (char *code_start, int offset)
+{
+  offset -= 6;
+  code_start[0] = 0xff;
+  code_start[1] = 0x25;
+  memcpy (code_start + 2, &offset, 4);
+}
+
 int
 main ()
 {
@@ -62,13 +70,12 @@ main ()
   modify_pointer[1] = reinterpret_cast<void *> (hook);
   modify_pointer[2] = reinterpret_cast<void *> (original_function);
   modify_pointer[3] = reinterpret_cast<void *> (ret_hook);
-  static const int template_size2 = (char *)template_for_hook_end
-                                    - (char *)template_for_hook2;
-  static const int template_size1 = (char *)template_for_hook2
-                                    - (char *)template_for_hook;
-  memcpy (&modify_pointer[4], (char *)template_for_hook, template_size1);
-  memcpy ((char *)&modify_pointer[4] + template_size1,
-          (char *)template_for_hook2, template_size2);
+  static const int template_size = (char *)template_for_hook_end
+                                   - (char *)template_for_hook;
+  memcpy (&modify_pointer[4], (char *)template_for_hook, template_size);
+  add_jump_to_original (static_cast<char *> (code_page) + template_size
+                            + sizeof (intptr_t) * 4,
+                        -(template_size + sizeof (intptr_t) * 2));
   typedef const char *(*pfn)(int a, int b, int c, int d, int e, int f, int g);
   pfn myfunc = (pfn)(&modify_pointer[4]);
   assert (0 == strcmp ((*myfunc)(0, 1, 2, 3, 4, 5, 6), "nimabi"));

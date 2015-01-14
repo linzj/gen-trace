@@ -58,7 +58,7 @@ OBJS := $(MAIN_OBJS) \
 		\
 		$(ARM_TEST_OBJS)
 
-CFLAGS := -O2 -g3 -gdwarf-4 -Wall -I. -fPIC -fvisibility=hidden -mthumb -march=armv7-a --sysroot=$(NDK_PATH_SYSROOT) $(GNU_STL_INCLUDE)
+CFLAGS := -O2 -g3 -gdwarf-4 -Wall -I. -fPIC -fvisibility=hidden -mthumb -march=armv7-a --sysroot=$(NDK_PATH_SYSROOT) $(GNU_STL_INCLUDE) -funwind-tables
 
 LDFLAGS := -pie --sysroot=$(NDK_PATH_SYSROOT)
 LDLIBS := -lc -lm $(GNU_STL_PATH) $(GNU_STL) -llog
@@ -80,7 +80,7 @@ CXX=arm-linux-androideabi-gcc
 	$(CXX) -MM -MT $*.o $(CFLAGS) $*.S > $*.d
 
 arm/hook_template_test_arm.o: arm/hook_template_test.cpp
-	$(CC) $(CFLAGS) -marm -c $^ -o $*.o
+	$(CC) $(CFLAGS) -marm -c arm/hook_template_test.cpp -o $*.o
 	$(CC) -MM -MT $*.o $(CFLAGS) $^ > $*.d
 
 mem_modify_test: mem_modify_test.o log.o mem_modify.o
@@ -108,14 +108,14 @@ arm_target_client_test: arm/hook_template_arm.o arm/hook_template_thumb.o arm/di
 	$(CXX) $(LDFLAGS) -o $@ $^ $(LDLIBS)
 
 libbase_controller_test_lib.so: base_controller_test_lib.o log.o
-	$(CXX) -shared -o $@ $^ $(LDLIBS)
+	$(CXX) $(LDFLAGS) -shared -o $@ $^ $(LDLIBS)
 
 base_controller_test_lib_arm.o: base_controller_test_lib.cpp
 	$(CC) $(CFLAGS) -marm -c $^ -o $*.o
-	$(CC) -MM $(CFLAGS) $^ > $*.d
+	$(CC) -MM -MT $*.o $(CFLAGS) $^ > $*.d
 
 libbase_controller_test_lib_arm.so: base_controller_test_lib_arm.o log.o
-	$(CXX) -shared -o $@ $^ $(LDLIBS)
+	$(CXX) $(LDFLAGS) -shared -o $@ $^ $(LDLIBS)
 
 base_controller_test: config_reader.o  base_controller.o code_manager_impl.o log.o code_modify.o mem_modify.o arm/flush_code.o arm/hook_template_arm.o arm/hook_template_thumb.o  arm/dis.o arm/dis_gnu.o arm/arm_target_client.o base_controller_test.o libbase_controller_test_lib.so libbase_controller_test_lib_arm.so disassembler.o dis_client.o base_target_client.o
 	$(CXX) $(LDFLAGS) -o $@ $(filter %.o, $^) $(LDLIBS)

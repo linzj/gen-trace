@@ -8,6 +8,7 @@ const char *original_function (int a, int b, int c, int d, int e, int f, int g)
 const char *
 original_function (int a, int b, int c, int d, int e, int f, int g)
 {
+  LOGI ("original_function\n");
   LOGI ("original_function %d, %d, %d, %d, %d, %d, %d, %d\n", a, b, c, d, e, f,
         g);
   assert (a == 0);

@@ -401,6 +401,23 @@ extern void __start_ctrace__ (void *original_ret, const char *name);
 extern void *__end_ctrace__ (const char *);
 }
 
+#if 0
+#include <sstream>
+#include <iomanip>
+static void
+print_data (char *data)
+{
+  using namespace std;
+  ostringstream oss;
+  data -= 0x40;
+  for (int i = 0; i < 0x90; ++i)
+    {
+      oss << "\\x" << hex << static_cast<unsigned long> (data[i]);
+    }
+  LOGI ("%s\n", oss.str ().c_str ());
+}
+#endif
+
 void
 __start_ctrace__ (void *original_ret, const char *name)
 {
