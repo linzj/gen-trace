@@ -15,17 +15,17 @@ namespace
 class my_fp_line_client : public fp_line_client
 {
 public:
-  my_fp_line_client (std::auto_ptr<std::ifstream> file);
+  my_fp_line_client (std::unique_ptr<std::ifstream> &&file);
   ~my_fp_line_client ();
 
 private:
   virtual const char *next_line ();
   std::string line_buf_;
-  std::auto_ptr<std::ifstream> file_;
+  std::unique_ptr<std::ifstream> file_;
 };
 
-my_fp_line_client::my_fp_line_client (std::auto_ptr<std::ifstream> file)
-    : file_ (file)
+my_fp_line_client::my_fp_line_client (std::unique_ptr<std::ifstream> &&file)
+    : file_ (std::move (file))
 {
 }
 
@@ -65,12 +65,12 @@ file_controller::open_line_client ()
 #else
 #define TRACE_FILE "/sdcard/trace.config"
 #endif
-  std::auto_ptr<std::ifstream> file (new std::ifstream (TRACE_FILE));
+  std::unique_ptr<std::ifstream> file (new std::ifstream (TRACE_FILE));
   if (!*file)
     {
       return NULL;
     }
-  return new my_fp_line_client (file);
+  return new my_fp_line_client (std::move (file));
 }
 
 void

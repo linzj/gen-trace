@@ -28,9 +28,9 @@ base_target_client::check_code (void *code_point, const char *name,
                                 int code_size, code_manager *m,
                                 code_context **ppcontext)
 {
-  std::auto_ptr<check_code_dis_client> code_check_client (
+  std::unique_ptr<check_code_dis_client> code_check_client (
       new_code_check_client (code_point));
-  std::auto_ptr<disassembler> dis (new_disassembler ());
+  std::unique_ptr<disassembler> dis (new_disassembler ());
   dis->set_client (code_check_client.get ());
   int _byte_needed_to_modify
       = byte_needed_to_modify (reinterpret_cast<intptr_t> (code_point));

@@ -1,7 +1,9 @@
 #include <string.h>
 #include <stdlib.h>
-#include <vector>
 #include <assert.h>
+#include <vector>
+#include <unordered_set>
+#include <string>
 #include "mem_modify.h"
 #include "arm_target_client.h"
 #include "dis.h"
@@ -66,7 +68,7 @@ private:
   size_t lowered_original_code_len_;
   bool ip_appears_;
   intptr_t last_addr_;
-  std::auto_ptr<desc_vector> desc_;
+  std::unique_ptr<desc_vector> desc_;
   friend class arm_target_client;
 };
 
@@ -151,6 +153,7 @@ arm_dis_client::on_instr (const char *dis_str, char *start, size_t s)
   // check if pc position independent code is here.
   do
     {
+      // check if pc position independent code is here.
       if (strstr (dis_str, "pc"))
         {
           is_accept_ = false;

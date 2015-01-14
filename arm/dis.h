@@ -23,7 +23,7 @@ public:
 
 private:
   class DisassemblerImpl;
-  std::auto_ptr<DisassemblerImpl> impl_;
+  std::unique_ptr<DisassemblerImpl> impl_;
 };
 #define DCHECK_EQ(a, b) assert ((a) == (b))
 #define DCHECK_NE(a, b) assert ((a) != (b))

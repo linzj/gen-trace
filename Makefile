@@ -49,7 +49,7 @@ OBJS := $(MAIN_OBJS) \
 		\
 		$(X64_TEST_OBJS)
 
-CFLAGS := -O0 -g -Wall -I. -fPIC -fvisibility=hidden
+CFLAGS := -O0 -g -Wall -I. -fPIC -fvisibility=hidden -std=c++11
 
 LDFLAGS := -pie
 LDLIBS := -lpthread -lrt

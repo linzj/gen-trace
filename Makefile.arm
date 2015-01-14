@@ -58,7 +58,8 @@ OBJS := $(MAIN_OBJS) \
 		\
 		$(ARM_TEST_OBJS)
 
-CFLAGS := -O2 -g3 -gdwarf-4 -Wall -I. -fPIC -fvisibility=hidden -mthumb -march=armv7-a --sysroot=$(NDK_PATH_SYSROOT) $(GNU_STL_INCLUDE) -funwind-tables
+CFLAGS := -O2 -g3 -gdwarf-4 -Wall -I. -fPIC -fvisibility=hidden -mthumb -march=armv7-a --sysroot=$(NDK_PATH_SYSROOT) $(GNU_STL_INCLUDE) -funwind-tables \
+			-std=c++11
 
 LDFLAGS := -pie --sysroot=$(NDK_PATH_SYSROOT)
 LDLIBS := -lc -lm $(GNU_STL_PATH) $(GNU_STL) -llog
