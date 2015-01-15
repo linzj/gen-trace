@@ -19,8 +19,10 @@ extern void template_for_hook_arm (void);
 extern void template_for_hook_arm_end (void);
 }
 
-static const int arm_byte_needed_to_modify = 12;
-static const int thumb_byte_needed_to_modify = 10;
+static const int arm_jump_bytes = 8;
+static const int thumb_ldr_jump_bytes = 8;
+static const int thumb_movt_movw_bytes = 10;
+static const int arm_movt_movw_bytes = 12;
 
 enum post_process_trampoline_type
 {
@@ -121,9 +123,17 @@ should_lower_branch (char *addr, intptr_t jumpto, size_t current_offset)
 {
   char *pinstr
       = reinterpret_cast<char *> (reinterpret_cast<intptr_t> (addr) & ~1UL);
-  if (jumpto < reinterpret_cast<intptr_t> (pinstr)
-                   + thumb_byte_needed_to_modify
-                   - static_cast<int> (current_offset))
+  intptr_t start = reinterpret_cast<intptr_t> (pinstr)
+                   - static_cast<int> (current_offset);
+  if (start & 3UL)
+    {
+      start += thumb_movt_movw_bytes;
+    }
+  else
+    {
+      start += thumb_ldr_jump_bytes;
+    }
+  if (jumpto < start)
     {
       return false;
     }
@@ -436,11 +446,19 @@ arm_target_client::byte_needed_to_modify (intptr_t target_code_point)
 {
   if (target_code_point & 1)
     {
-      return thumb_byte_needed_to_modify;
+      intptr_t target_code_point_2 = target_code_point & ~1UL;
+      if (target_code_point_2 & 3UL)
+        {
+          return thumb_movt_movw_bytes;
+        }
+      else
+        {
+          return thumb_ldr_jump_bytes;
+        }
     }
   else
     {
-      return arm_byte_needed_to_modify;
+      return arm_jump_bytes;
     }
 }
 
@@ -512,8 +530,45 @@ arm_target_client::flush_code (void *code_start, int len)
   ::flush_code (code_start, len);
 }
 
+static int
+emit_ldr_w (uint16_t *write, bool &emitted_nop)
+{
+  int index = 0;
+  emitted_nop = (reinterpret_cast<intptr_t> (write) & (3UL)) != 0;
+  // ldr.w pc, [pc, #x]
+  write[index++] = 0xf8df;
+  if (emitted_nop)
+    {
+      // ldr.w pc, [pc, #4], nop
+      write[index++] = 0xf004;
+      write[index++] = 0xbf00;
+    }
+  else
+    {
+      // ldr.w pc, [pc, #0]
+      write[index++] = 0xf000;
+    }
+  return index;
+}
+
+static int
+emit_nop_thumb (uint16_t *write)
+{
+  write[0] = 0xbf00;
+  return 1;
+}
+
+static int
+emit_address_thumb (uint16_t *write, intptr_t addr)
+{
+  addr |= 1;
+  write[0] = (addr & 0xffff);
+  write[1] = ((addr >> 16) & 0xffff);
+  return 2;
+}
+
 static void
-fill_thumb_movt_movw (intptr_t target, uint16_t *modify_intr_pointer, int bl)
+emit_thumb_movt_movw (intptr_t target, uint16_t *modify_intr_pointer, int bl)
 {
   const uint16_t ip = 12;
   uint16_t first, second, third, forth, fifth;
@@ -561,7 +616,7 @@ fill_thumb_movt_movw (intptr_t target, uint16_t *modify_intr_pointer, int bl)
 }
 
 void
-fill_arm_movt_movw (intptr_t target, uint32_t *modify_intr_pointer, int bl)
+emit_arm_movt_movw (intptr_t target, uint32_t *modify_intr_pointer, int bl)
 {
   const uint16_t ip = 12;
   // use movw ,movt as above.
@@ -615,66 +670,30 @@ arm_target_client::modify_code (code_context *context)
   if (target_code_point & 1)
     {
       // thumb mode
+      // ldr.w pc, [pc, #-0], address
       uint16_t *modify_intr_pointer
           = reinterpret_cast<uint16_t *> (&instr->data[0]);
-      fill_thumb_movt_movw (trampoline_code_start, modify_intr_pointer, 0);
+      intptr_t target_code_point_2 = target_code_point & ~1UL;
+      if (target_code_point_2 & 3UL)
+        {
+          emit_thumb_movt_movw (trampoline_code_start, modify_intr_pointer, 0);
+        }
+      else
+        {
+          modify_intr_pointer[0] = 0xf8df;
+          modify_intr_pointer[1] = 0xf000;
+          emit_address_thumb (modify_intr_pointer + 2, trampoline_code_start);
+        }
     }
   else
     {
+      // ldr pc, [pc, #-4], address
       uint32_t *modify_intr_pointer
           = reinterpret_cast<uint32_t *> (&instr->data[0]);
-      fill_arm_movt_movw (trampoline_code_start, modify_intr_pointer, 0);
+      modify_intr_pointer[0] = 0xe51ff004;
+      modify_intr_pointer[1] = trampoline_code_start;
     }
   return instr;
-}
-
-static void
-handle_bl_thumb (char *&start, char *&write, intptr_t addr, bool is_blx)
-{
-  start += 4;
-  if (!is_blx)
-    {
-      addr |= 1;
-    }
-  fill_thumb_movt_movw (addr, reinterpret_cast<uint16_t *> (write), 1);
-  write += thumb_byte_needed_to_modify;
-}
-
-static int
-emit_ldr_w (uint16_t *write, bool &emitted_nop)
-{
-  int index = 0;
-  emitted_nop = (reinterpret_cast<intptr_t> (write) & (3UL)) != 0;
-  // ldr.w pc, [pc, #x]
-  write[index++] = 0xf8df;
-  if (emitted_nop)
-    {
-      // ldr.w pc, [pc, #4], nop
-      write[index++] = 0xf004;
-      write[index++] = 0xbf00;
-    }
-  else
-    {
-      // ldr.w pc, [pc, #0]
-      write[index++] = 0xf000;
-    }
-  return index;
-}
-
-static int
-emit_nop_thumb (uint16_t *write)
-{
-  write[0] = 0xbf00;
-  return 1;
-}
-
-static int
-emit_address_thumb (uint16_t *write, intptr_t addr)
-{
-  addr |= 1;
-  write[0] = (addr & 0xffff);
-  write[1] = ((addr >> 16) & 0xffff);
-  return 2;
 }
 
 static void
@@ -699,6 +718,18 @@ handle_cb_thumb (char *&start, char *&write, intptr_t addr, bool is_not_zero,
       index += emit_nop_thumb (_write + index);
     }
   write += sizeof (uint16_t) * index;
+}
+
+static void
+handle_bl_thumb (char *&start, char *&write, intptr_t addr, bool is_blx)
+{
+  start += 4;
+  if (!is_blx)
+    {
+      addr |= 1;
+    }
+  emit_thumb_movt_movw (addr, reinterpret_cast<uint16_t *> (write), 1);
+  write += thumb_movt_movw_bytes;
 }
 
 static void
@@ -773,8 +804,8 @@ static void
 handle_bl_arm (char *&start, char *&write, intptr_t addr, bool is_blx)
 {
   start += 4;
-  fill_arm_movt_movw (addr, reinterpret_cast<uint32_t *> (write), 1);
-  write += arm_byte_needed_to_modify;
+  emit_arm_movt_movw (addr, reinterpret_cast<uint32_t *> (write), 1);
+  write += arm_movt_movw_bytes;
 }
 
 static void
