@@ -25,12 +25,12 @@ flush_code (void *start, size_t size)
 #if defined(__arm__) && !defined(__thumb__)
   // __arm__ may be defined in thumb mode.
   register uint32_t scno asm("r7") = __ARM_NR_cacheflush;
-    asm volatile("svc 0x0"
+  asm volatile("svc 0x0"
                : "=r"(beg)
                : "0"(beg), "r"(end), "r"(flg), "r"(scno));
 #else
   // r7 is reserved by the EABI in thumb mode.
-    asm volatile("@   Enter ARM Mode  \n\t"
+  asm volatile("@   Enter ARM Mode  \n\t"
                "adr r3, 1f      \n\t"
                "bx  r3          \n\t"
                ".ALIGN 4        \n\t"

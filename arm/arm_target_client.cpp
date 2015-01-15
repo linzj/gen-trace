@@ -2,7 +2,7 @@
 #include <stdlib.h>
 #include <assert.h>
 #include <vector>
-#include <unordered_set>
+#include <unordered_map>
 #include <string>
 #include "mem_modify.h"
 #include "arm_target_client.h"
@@ -27,6 +27,7 @@ enum post_process_trampoline_type
   INVALID,
   BL,
   CB,
+  B,
 };
 
 struct post_process_trampoline_desc
@@ -47,6 +48,10 @@ struct post_process_trampoline_desc
       bool is_not_zero;
       int rn;
     } cb;
+    struct
+    {
+      int cond_code;
+    } b;
   } un;
 };
 
@@ -111,6 +116,66 @@ arm_dis_client::on_instr (const char *dis_str, char *start, size_t s)
   advance (s);
 }
 
+static inline bool
+should_lower_branch (char *addr, intptr_t jumpto, size_t current_offset)
+{
+  char *pinstr
+      = reinterpret_cast<char *> (reinterpret_cast<intptr_t> (addr) & ~1UL);
+  if (jumpto < reinterpret_cast<intptr_t> (pinstr)
+                   + thumb_byte_needed_to_modify
+                   - static_cast<int> (current_offset))
+    {
+      return false;
+    }
+  return true;
+}
+
+static std::unordered_map<std::string, int> g_condi_keywords
+    = { { "eq", 0 },
+        { "ne", 1 },
+        { "cs", 2 },
+        { "cc", 3 },
+        { "mi", 4 },
+        { "pl", 5 },
+        { "vs", 6 },
+        { "vc", 7 },
+        { "hi", 8 },
+        { "ls", 9 },
+        { "ge", 10 },
+        { "lt", 11 },
+        { "gt", 12 },
+        { "le", 13 } };
+
+static bool
+is_conditional_code (const char *str)
+{
+  if (g_condi_keywords.find (str) != g_condi_keywords.end ())
+    {
+      return true;
+    }
+  return false;
+}
+
+static bool
+is_branch (const char *str)
+{
+  if (str[1] == '\0')
+    {
+      // simple
+      return true;
+    }
+  if (str[1] == 'l' && str[2] == 'x')
+    {
+      // blx
+      return false;
+    }
+  if (is_conditional_code (str + 1))
+    {
+      return true;
+    }
+  return false;
+}
+
 void
 arm_dis_client::on_instr_1 (const char *dis_str, char *start, size_t s)
 {
@@ -137,6 +202,7 @@ arm_dis_client::on_instr_1 (const char *dis_str, char *start, size_t s)
     LSL_TYPE,
     LSR_TYPE,
     ASR_TYPE,
+    B_TYPE,
     BL_TYPE,
     CB_TYPE,
     ASL_TYPE,
@@ -166,10 +232,10 @@ arm_dis_client::on_instr_1 (const char *dis_str, char *start, size_t s)
                      { "lsl", 3, LSL_TYPE },
                      { "lsr", 3, LSR_TYPE },
                      { "asr", 3, ASR_TYPE },
-                     { "bl", 2, BL_TYPE },
                      { "cb", 2, CB_TYPE },
                      { "asl", 3, ASL_TYPE },
-                     { "tst", 3, TST_TYPE } };
+                     { "tst", 3, TST_TYPE },
+                     { "b", 1, B_TYPE } };
   enum instr_type instr_type;
   for (size_t i = 0; i < sizeof (check_list) / sizeof (check_list[0]); ++i)
     {
@@ -206,7 +272,7 @@ arm_dis_client::on_instr_1 (const char *dis_str, char *start, size_t s)
   do
     {
       // hack on bl inst
-      if (instr_type == BL_TYPE)
+      if (instr_type == B_TYPE)
         {
           // conditional is harder, not handle now.
           if (ip_appears_ || dis_str[2] != '\0')
@@ -221,14 +287,65 @@ arm_dis_client::on_instr_1 (const char *dis_str, char *start, size_t s)
               break;
             }
 
-          // movt, movw, blx ip
-          int offset_add_end = 4 + 4 + (is_thumb_ ? 2 : 4);
-          ensure_desc ();
-          assert (last_addr_ != -1);
-          post_process_trampoline_desc desc = { BL, offset_, last_addr_ };
-          desc.un.bl.is_blx = false;
-          desc_->push_back (desc);
-          lowered_original_code_len_ += offset_add_end - s;
+          // remove .n suffix
+          char *dot_n;
+          if ((dot_n = strrchr (dis_str, '.')))
+            {
+              if (dot_n[1] == 'n')
+                {
+                  dot_n[0] = '\0';
+                }
+            }
+
+          if (dis_str[1] == 'l' && dis_str[2] == '\0')
+            {
+              // bl unconditional
+              // movt, movw, blx ip
+              int offset_add_end = 4 + 4 + (is_thumb_ ? 2 : 4);
+              ensure_desc ();
+              assert (last_addr_ != -1);
+              post_process_trampoline_desc desc = { BL, offset_, last_addr_ };
+              desc.un.bl.is_blx = false;
+              desc_->push_back (desc);
+              lowered_original_code_len_ += offset_add_end - s;
+            }
+          else if (is_branch (dis_str))
+            {
+              // branch
+              assert (last_addr_ != -1);
+
+              // in this circumstance, we don't want to do any change.
+              // just copy it to the original code part.
+              if (!should_lower_branch (start, last_addr_, offset_))
+                {
+                  break;
+                }
+              int offset_add_end;
+              if (is_thumb_)
+                {
+                  // bcond, b.n ldr.w nop address
+                  // or ldr.w nop nop nop address
+                  offset_add_end = 2 + 2 + 4 + 2 + 4;
+                }
+              else
+                {
+                  // bcond, b, ldr address
+                  // or ldr address, address, nop,nop
+                  offset_add_end = 4 + 4 + 4 + 4;
+                }
+              ensure_desc ();
+              post_process_trampoline_desc desc = { B, offset_, last_addr_ };
+              // always;
+              int cond_code = 14;
+              auto found = g_condi_keywords.find (dis_str + 1);
+              if (found != g_condi_keywords.end ())
+                {
+                  cond_code = found->second;
+                }
+              desc.un.b.cond_code = cond_code;
+              desc_->push_back (desc);
+              lowered_original_code_len_ += offset_add_end - s;
+            }
         }
       else if (instr_type == CB_TYPE)
         {
@@ -237,9 +354,7 @@ arm_dis_client::on_instr_1 (const char *dis_str, char *start, size_t s)
               reinterpret_cast<intptr_t> (start) & ~1UL);
           // in this circumstance, we don't want to do any change.
           // just copy it to the original code part.
-          if (last_addr_ < reinterpret_cast<intptr_t> (pinstr)
-                               + thumb_byte_needed_to_modify
-                               - static_cast<int> (offset_))
+          if (!should_lower_branch (start, last_addr_, offset_))
             {
               break;
             }
@@ -525,6 +640,43 @@ handle_bl_thumb (char *&start, char *&write, intptr_t addr, bool is_blx)
   write += thumb_byte_needed_to_modify;
 }
 
+static int
+emit_ldr_w (uint16_t *write, bool &emitted_nop)
+{
+  int index = 0;
+  emitted_nop = (reinterpret_cast<intptr_t> (write) & (3UL)) != 0;
+  // ldr.w pc, [pc, #x]
+  write[index++] = 0xf8df;
+  if (emitted_nop)
+    {
+      // ldr.w pc, [pc, #4], nop
+      write[index++] = 0xf004;
+      write[index++] = 0xbf00;
+    }
+  else
+    {
+      // ldr.w pc, [pc, #0]
+      write[index++] = 0xf000;
+    }
+  return index;
+}
+
+static int
+emit_nop_thumb (uint16_t *write)
+{
+  write[0] = 0xbf00;
+  return 1;
+}
+
+static int
+emit_address_thumb (uint16_t *write, intptr_t addr)
+{
+  addr |= 1;
+  write[0] = (addr & 0xffff);
+  write[1] = ((addr >> 16) & 0xffff);
+  return 2;
+}
+
 static void
 handle_cb_thumb (char *&start, char *&write, intptr_t addr, bool is_not_zero,
                  int rn)
@@ -535,30 +687,63 @@ handle_cb_thumb (char *&start, char *&write, intptr_t addr, bool is_not_zero,
   int _is_not_zero = !is_not_zero;
   cb ^= (cb & (1 << 11)) ^ (_is_not_zero << 11);
   cb |= rn;
-  bool nop_at_front = (reinterpret_cast<intptr_t> (write) & (3UL)) == 0;
+  bool emitted_nop;
   // cb completed here.
   uint16_t *_write = reinterpret_cast<uint16_t *> (write);
   int index = 0;
   _write[index++] = cb;
-  // ldr.w pc, [pc, #x]
-  _write[index++] = 0xf8df;
-  if (nop_at_front)
+  index += emit_ldr_w (_write + index, emitted_nop);
+  index += emit_address_thumb (_write + index, addr);
+  if (!emitted_nop)
     {
-      // ldr.w pc, [pc, #4], nop
-      _write[index++] = 0xf004;
-      _write[index++] = 0xbf00;
+      index += emit_nop_thumb (_write + index);
+    }
+  write += sizeof (uint16_t) * index;
+}
+
+static void
+handle_b_thumb (char *&start, char *&write, intptr_t addr, int cond_code)
+{
+  start += 2;
+  int index = 0;
+  uint16_t *_write = reinterpret_cast<uint16_t *> (write);
+  if (cond_code == 14)
+    {
+      // always
+      // ldr.w nop nop nop address
+      bool emitted_nop;
+      index += emit_ldr_w (_write, emitted_nop);
+      index += emit_address_thumb (_write + index, addr);
+      index += emit_nop_thumb (_write + index);
+      index += emit_nop_thumb (_write + index);
+      if (!emitted_nop)
+        {
+          index += emit_nop_thumb (_write + index);
+        }
     }
   else
     {
-      // ldr.w pc, [pc, #0]
-      _write[index++] = 0xf000;
-    }
-  addr |= 1;
-  _write[index++] = (addr & 0xffff);
-  _write[index++] = ((addr >> 16) & 0xffff);
-  if (!nop_at_front)
-    {
-      _write[index++] = 0xbf00;
+      // cond
+      // bcond, b.n ldr.w nop address
+      bool emitted_nop;
+      _write[index++] = 0xd000 | (cond_code << 8);
+      // lazy write
+      int lazy_index = index++;
+      uint16_t bninstr;
+      index += emit_ldr_w (_write + index, emitted_nop);
+      if (emitted_nop)
+        {
+          bninstr = 0xe004;
+        }
+      else
+        {
+          bninstr = 0xe003;
+        }
+      _write[lazy_index] = bninstr;
+      if (!emitted_nop)
+        {
+          index += emit_nop_thumb (_write + index);
+        }
     }
   write += sizeof (uint16_t) * index;
 }
@@ -576,6 +761,9 @@ handle_thumb_entry (post_process_trampoline_desc &desc, char *&start,
       handle_cb_thumb (start, write, desc.addr, desc.un.cb.is_not_zero,
                        desc.un.cb.rn);
       break;
+    case B:
+      handle_b_thumb (start, write, desc.addr, desc.un.b.cond_code);
+      break;
     default:
       assert (false);
     }
@@ -590,6 +778,32 @@ handle_bl_arm (char *&start, char *&write, intptr_t addr, bool is_blx)
 }
 
 static void
+handle_b_arm (char *&start, char *&write, intptr_t addr, int cond_code)
+{
+  start += 4;
+  int index = 0;
+  uint32_t *_write = reinterpret_cast<uint32_t *> (write);
+  if (cond_code == 14)
+    {
+      // always
+      // ldr address, address, nop,nop
+      _write[index++] = 0xe51ff004;
+      _write[index++] = addr;
+      _write[index++] = 0xe320f000;
+      _write[index++] = 0xe320f000;
+    }
+  else
+    {
+      // bcond, b, ldr address
+      _write[index++] = 0x0a000000 | (cond_code << 28);
+      _write[index++] = 0xea000001;
+      _write[index++] = 0xe51ff004;
+      _write[index++] = addr;
+    }
+  write += index * sizeof (uint32_t);
+}
+
+static void
 handle_arm_entry (post_process_trampoline_desc &desc, char *&start,
                   char *&write)
 {
@@ -597,6 +811,9 @@ handle_arm_entry (post_process_trampoline_desc &desc, char *&start,
     {
     case BL:
       handle_bl_arm (start, write, desc.addr, desc.un.bl.is_blx);
+      break;
+    case B:
+      handle_b_arm (start, write, desc.addr, desc.un.b.cond_code);
       break;
     default:
       assert (false);
