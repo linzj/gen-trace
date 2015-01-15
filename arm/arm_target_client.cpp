@@ -26,6 +26,7 @@ enum post_process_trampoline_type
 {
   INVALID,
   BL,
+  CB,
 };
 
 struct post_process_trampoline_desc
@@ -41,6 +42,11 @@ struct post_process_trampoline_desc
     {
       bool is_blx;
     } bl;
+    struct
+    {
+      bool is_not_zero;
+      int rn;
+    } cb;
   } un;
 };
 
@@ -58,6 +64,7 @@ public:
 
 private:
   virtual void on_instr (const char *, char *start, size_t s);
+  void on_instr_1 (const char *, char *start, size_t s);
   virtual void on_addr (intptr_t);
   virtual int lowered_original_code_len (int);
   void ensure_desc ();
@@ -99,76 +106,116 @@ arm_dis_client::advance (size_t s)
 void
 arm_dis_client::on_instr (const char *dis_str, char *start, size_t s)
 {
+  on_instr_1 (dis_str, start, s);
+  last_addr_ = -1;
+  advance (s);
+}
+
+void
+arm_dis_client::on_instr_1 (const char *dis_str, char *start, size_t s)
+{
   bool check_pass = false;
   // check the instr.
+  enum instr_type
+  {
+    MOV_TYPE,
+    PUSH_TYPE,
+    POP_TYPE,
+    LDR_TYPE,
+    STR_TYPE,
+    STM_TYPE,
+    LDM_TYPE,
+    ADD_TYPE,
+    SUB_TYPE,
+    MUL_TYPE,
+    DIV_TYPE,
+    XOR_TYPE,
+    OR_TYPE,
+    AND_TYPE,
+    NOT_TYPE,
+    CMP_TYPE,
+    LSL_TYPE,
+    LSR_TYPE,
+    ASR_TYPE,
+    BL_TYPE,
+    CB_TYPE,
+    ASL_TYPE,
+    TST_TYPE,
+  };
   struct
   {
     const char *instr_name;
     int size;
-  } check_list[] = { { "mov", 3 },
-                     { "push", 4 },
-                     { "pop", 3 },
-                     { "ldr", 3 },
-                     { "str", 3 },
-                     { "stm", 3 },
-                     { "ldm", 3 },
-                     { "add", 3 },
-                     { "sub", 3 },
-                     { "mul", 3 },
-                     { "div", 3 },
-                     { "xor", 3 },
-                     { "or", 2 },
-                     { "and", 3 },
-                     { "not", 3 },
-                     { "cmp", 3 },
-                     { "lsl", 3 },
-                     { "lsr", 3 },
-                     { "asr", 3 },
-                     { "bl", 2 },
-                     { "asl", 3 },
-                     { "tst", 3 } };
+    enum instr_type type;
+  } check_list[] = { { "mov", 3, MOV_TYPE },
+                     { "push", 4, PUSH_TYPE },
+                     { "pop", 3, POP_TYPE },
+                     { "ldr", 3, LDR_TYPE },
+                     { "str", 3, STR_TYPE },
+                     { "stm", 3, STM_TYPE },
+                     { "ldm", 3, LDM_TYPE },
+                     { "add", 3, ADD_TYPE },
+                     { "sub", 3, SUB_TYPE },
+                     { "mul", 3, MUL_TYPE },
+                     { "div", 3, DIV_TYPE },
+                     { "xor", 3, XOR_TYPE },
+                     { "or", 2, OR_TYPE },
+                     { "and", 3, AND_TYPE },
+                     { "not", 3, NOT_TYPE },
+                     { "cmp", 3, CMP_TYPE },
+                     { "lsl", 3, LSL_TYPE },
+                     { "lsr", 3, LSR_TYPE },
+                     { "asr", 3, ASR_TYPE },
+                     { "bl", 2, BL_TYPE },
+                     { "cb", 2, CB_TYPE },
+                     { "asl", 3, ASL_TYPE },
+                     { "tst", 3, TST_TYPE } };
+  enum instr_type instr_type;
   for (size_t i = 0; i < sizeof (check_list) / sizeof (check_list[0]); ++i)
     {
       if (strncmp (dis_str, check_list[i].instr_name, check_list[i].size) == 0)
         {
           check_pass = true;
+          instr_type = check_list[i].type;
           break;
         }
     }
   if (!check_pass)
     {
       is_accept_ = false;
-      advance (s);
       return;
     }
   char *operand;
   if ((operand = strchr (dis_str, '\t')))
     {
+      *operand = '\0';
       operand += 1;
       if (strstr (operand, "ip"))
         {
           ip_appears_ = true;
         }
+      // check if pc position independent code is here.
+      // currently these code is not supported
+      if (strstr (operand, "pc"))
+        {
+          is_accept_ = false;
+          return;
+        }
     }
   // check if pc position independent code is here.
   do
     {
-      // check if pc position independent code is here.
-      if (strstr (dis_str, "pc"))
-        {
-          is_accept_ = false;
-        }
       // hack on bl inst
-      else if (dis_str[0] == 'b')
+      if (instr_type == BL_TYPE)
         {
           // conditional is harder, not handle now.
-          if (ip_appears_ || dis_str[2] != '\t')
+          if (ip_appears_ || dis_str[2] != '\0')
             {
               is_accept_ = false;
               break;
             }
           // if this is a bl rx case.
-          if (strrchr (dis_str, 'r'))
+          if (strchr (operand, 'r'))
             {
               // just copy not need to handle
               break;
@@ -179,14 +226,40 @@ arm_dis_client::on_instr (const char *dis_str, char *start, size_t s)
           ensure_desc ();
           assert (last_addr_ != -1);
           post_process_trampoline_desc desc = { BL, offset_, last_addr_ };
-          last_addr_ = -1;
           desc.un.bl.is_blx = false;
           desc_->push_back (desc);
           lowered_original_code_len_ += offset_add_end - s;
         }
+      else if (instr_type == CB_TYPE)
+        {
+          assert (last_addr_ != -1);
+          uint16_t *pinstr = reinterpret_cast<uint16_t *> (
+              reinterpret_cast<intptr_t> (start) & ~1UL);
+          // in this circumstance, we don't want to do any change.
+          // just copy it to the original code part.
+          if (last_addr_ < reinterpret_cast<intptr_t> (pinstr)
+                               + thumb_byte_needed_to_modify
+                               - static_cast<int> (offset_))
+            {
+              break;
+            }
+          uint16_t instr = *pinstr;
+          bool is_not_zero = false;
+          if (instr & (1 << 11))
+            {
+              is_not_zero = true;
+            }
+          post_process_trampoline_desc desc = { CB, offset_, last_addr_ };
+          desc.un.cb.is_not_zero = is_not_zero;
+          desc.un.cb.rn = instr & ((1 << 3) - 1);
+          ensure_desc ();
+          desc_->push_back (desc);
+          // cb{n}z, ldr.w pc, [pc, 0], nop, 4 byte address
+          int offset_add_end = 2 + 4 + 2 + 4;
+          lowered_original_code_len_ += offset_add_end - s;
+        }
     }
   while (false);
-  advance (s);
 }
 
 void
@@ -453,6 +526,44 @@ handle_bl_thumb (char *&start, char *&write, intptr_t addr, bool is_blx)
 }
 
 static void
+handle_cb_thumb (char *&start, char *&write, intptr_t addr, bool is_not_zero,
+                 int rn)
+{
+  start += 2;
+  // cb{n}z, ldr.w pc, [pc, 0], nop, 4 byte address
+  uint16_t cb = 0xb120;
+  int _is_not_zero = !is_not_zero;
+  cb ^= (cb & (1 << 11)) ^ (_is_not_zero << 11);
+  cb |= rn;
+  bool nop_at_front = (reinterpret_cast<intptr_t> (write) & (3UL)) == 0;
+  // cb completed here.
+  uint16_t *_write = reinterpret_cast<uint16_t *> (write);
+  int index = 0;
+  _write[index++] = cb;
+  // ldr.w pc, [pc, #x]
+  _write[index++] = 0xf8df;
+  if (nop_at_front)
+    {
+      // ldr.w pc, [pc, #4], nop
+      _write[index++] = 0xf004;
+      _write[index++] = 0xbf00;
+    }
+  else
+    {
+      // ldr.w pc, [pc, #0]
+      _write[index++] = 0xf000;
+    }
+  addr |= 1;
+  _write[index++] = (addr & 0xffff);
+  _write[index++] = ((addr >> 16) & 0xffff);
+  if (!nop_at_front)
+    {
+      _write[index++] = 0xbf00;
+    }
+  write += sizeof (uint16_t) * index;
+}
+
+static void
 handle_thumb_entry (post_process_trampoline_desc &desc, char *&start,
                     char *&write)
 {
@@ -460,6 +571,10 @@ handle_thumb_entry (post_process_trampoline_desc &desc, char *&start,
     {
     case BL:
       handle_bl_thumb (start, write, desc.addr, desc.un.bl.is_blx);
+      break;
+    case CB:
+      handle_cb_thumb (start, write, desc.addr, desc.un.cb.is_not_zero,
+                       desc.un.cb.rn);
       break;
     default:
       assert (false);
@@ -526,6 +641,7 @@ arm_target_client::copy_original_code (void *trampoline_code_start,
           handle_arm_entry (*i, start, write);
         }
     }
+
   memcpy (write, start,
           reinterpret_cast<int> (_target_code_point + len - start));
 }

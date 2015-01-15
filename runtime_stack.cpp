@@ -414,7 +414,7 @@ print_data (char *data)
     {
       oss << "\\x" << hex << static_cast<unsigned long> (data[i]);
     }
-  LOGI ("%s\n", oss.str ().c_str ());
+  LOGI ("%p:%s\n", data + 0x40, oss.str ().c_str ());
 }
 #endif
 

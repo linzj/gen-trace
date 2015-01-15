@@ -46,7 +46,6 @@ public:
   {
     check_code_okay,
     check_code_not_accept,
-    check_code_exceed_trampoline,
     check_code_back_edge,
     check_code_too_small,
     check_code_memory,
