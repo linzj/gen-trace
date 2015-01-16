@@ -125,15 +125,16 @@ should_lower_branch (char *addr, intptr_t jumpto, size_t current_offset)
       = reinterpret_cast<char *> (reinterpret_cast<intptr_t> (addr) & ~1UL);
   intptr_t start = reinterpret_cast<intptr_t> (pinstr)
                    - static_cast<int> (current_offset);
+  intptr_t end;
   if (start & 3UL)
     {
-      start += thumb_movt_movw_bytes;
+      end = start + thumb_movt_movw_bytes;
     }
   else
     {
-      start += thumb_ldr_jump_bytes;
+      end = start + thumb_ldr_jump_bytes;
     }
-  if (jumpto < start)
+  if (jumpto < end)
     {
       return false;
     }
@@ -328,6 +329,9 @@ arm_dis_client::on_instr_1 (const char *dis_str, char *start, size_t s)
               // just copy it to the original code part.
               if (!should_lower_branch (start, last_addr_, offset_))
                 {
+                  // FIXME: ISSUES#10 now we can not handle such a short
+                  // branch.
+                  is_accept_ = false;
                   break;
                 }
               int offset_add_end;
@@ -366,6 +370,9 @@ arm_dis_client::on_instr_1 (const char *dis_str, char *start, size_t s)
           // just copy it to the original code part.
           if (!should_lower_branch (start, last_addr_, offset_))
             {
+              // FIXME: ISSUES#10 now we can not handle such a short
+              // branch.
+              is_accept_ = false;
               break;
             }
           uint16_t instr = *pinstr;
