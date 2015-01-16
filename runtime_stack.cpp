@@ -402,19 +402,34 @@ extern void *__end_ctrace__ (const char *);
 }
 
 #if 0
-#include <sstream>
-#include <iomanip>
-static void
+static void print_data (char *data);
+void
 print_data (char *data)
 {
-  using namespace std;
-  ostringstream oss;
-  data -= 0x40;
-  for (int i = 0; i < 0x90; ++i)
+  char *data_1 = data - 0x40;
+  char *data_2 = reinterpret_cast<char *> (
+      (reinterpret_cast<intptr_t> (data_1) + 4095UL) & ~(4095UL));
+  if (data_2 < data)
+    data_1 = data_2;
+
+  int sum = 0;
+  int len = 0x90;
+  intptr_t data_3 = reinterpret_cast<intptr_t> (data_1);
+  if ((data_3 & 4095) + len >= 4096)
     {
-      oss << "\\x" << hex << static_cast<unsigned long> (data[i]);
+      len = 4096 - (data_3 & 4095);
     }
-  LOGI ("%p:%s\n", data + 0x40, oss.str ().c_str ());
+  for (int i = 0; i < len; ++i)
+    {
+      sum += snprintf (NULL, 0, "\\x%x", data_1[i]);
+    }
+  char buf[sum + 1];
+  int sum_1 = 0;
+  for (int i = 0; i < len; ++i)
+    {
+      sum_1 += snprintf (buf + sum_1, sum + 1 - sum_1, "\\x%x", data_1[i]);
+    }
+  LOGI ("%p:%p:%s\n", data_1, data, buf);
 }
 #endif
 

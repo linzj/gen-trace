@@ -30,6 +30,7 @@ enum post_process_trampoline_type
   BL,
   CB,
   B,
+  ADDPC,
 };
 
 struct post_process_trampoline_desc
@@ -54,6 +55,10 @@ struct post_process_trampoline_desc
     {
       int cond_code;
     } b;
+    struct
+    {
+      int rn;
+    } add_pc;
   } un;
 };
 
@@ -191,6 +196,8 @@ void
 arm_dis_client::on_instr_1 (const char *dis_str, char *start, size_t s)
 {
   bool check_pass = false;
+  bool pc_showup = false;
+  bool mem_operator = false;
   // check the instr.
   enum instr_type
   {
@@ -262,11 +269,16 @@ arm_dis_client::on_instr_1 (const char *dis_str, char *start, size_t s)
       is_accept_ = false;
       return;
     }
-  char *operand;
+  char *operand, *operand2 = NULL;
   if ((operand = strchr (dis_str, '\t')))
     {
       *operand = '\0';
       operand += 1;
+      operand2 = strchr (operand, ',');
+      if (operand2)
+        {
+          operand2 += 2;
+        }
       if (strstr (operand, "ip"))
         {
           ip_appears_ = true;
@@ -275,8 +287,11 @@ arm_dis_client::on_instr_1 (const char *dis_str, char *start, size_t s)
       // currently these code is not supported
       if (strstr (operand, "pc"))
         {
-          is_accept_ = false;
-          return;
+          pc_showup = true;
+        }
+      if (operand[0] == '[' || (operand2 && operand2[0] == '['))
+        {
+          mem_operator = true;
         }
     }
   // check if pc position independent code is here.
@@ -388,6 +403,45 @@ arm_dis_client::on_instr_1 (const char *dis_str, char *start, size_t s)
           desc_->push_back (desc);
           // cb{n}z, ldr.w pc, [pc, 0], nop, 4 byte address
           int offset_add_end = 2 + 4 + 2 + 4;
+          lowered_original_code_len_ += offset_add_end - s;
+        }
+      else if (pc_showup)
+        {
+          // FIXME:NOT support ldr rx, [pc,x] now;
+          if (mem_operator || instr_type != ADD_TYPE || operand[0] != 'r')
+            {
+              is_accept_ = false;
+              break;
+            }
+          if (dis_str[3] != '\0')
+            {
+              // conditional add not supported
+              is_accept_ = false;
+              break;
+            }
+          assert (last_addr_ != -1);
+          int rn = operand[1] - '0';
+          // not supported rn > 7 when thumb
+          if (rn > 7 && is_thumb_)
+            {
+              is_accept_ = false;
+              break;
+            }
+          post_process_trampoline_desc desc = { CB, offset_, last_addr_ };
+          desc.un.add_pc.rn = rn;
+          ensure_desc ();
+          desc_->push_back (desc);
+          // push rx; movt rx; movw rx; ldr rx, [rx]; add rn, rx;
+          // pop rx;
+          int offset_add_end;
+          if (is_thumb_)
+            {
+              offset_add_end = 2 + 4 + 4 + 2 + 2 + 2;
+            }
+          else
+            {
+              offset_add_end = 6 * 4;
+            }
           lowered_original_code_len_ += offset_add_end - s;
         }
     }
@@ -574,11 +628,10 @@ emit_address_thumb (uint16_t *write, intptr_t addr)
   return 2;
 }
 
-static void
-emit_thumb_movt_movw (intptr_t target, uint16_t *modify_intr_pointer, int bl)
+static int
+emit_movt_movw_thumb (intptr_t target, uint16_t *modify_intr_pointer, int rn)
 {
-  const uint16_t ip = 12;
-  uint16_t first, second, third, forth, fifth;
+  uint16_t first, second, third, forth;
   uint16_t lower_imm16 = (target & 0xffff);
   uint16_t higher_imm16 = static_cast<uintptr_t> (target & 0xffff0000) >> 16;
   // first second: movw
@@ -592,7 +645,7 @@ emit_thumb_movt_movw (intptr_t target, uint16_t *modify_intr_pointer, int bl)
     first |= 0x24 << 4;
     first |= imm4;
     second = imm3 << 12;
-    second |= ip << 8;
+    second |= rn << 8;
     second |= imm8;
     second |= 1;
   }
@@ -607,27 +660,35 @@ emit_thumb_movt_movw (intptr_t target, uint16_t *modify_intr_pointer, int bl)
     third |= 0x2c << 4;
     third |= imm4;
     forth = imm3 << 12;
-    forth |= ip << 8;
+    forth |= rn << 8;
     forth |= imm8;
   }
+  modify_intr_pointer[0] = first;
+  modify_intr_pointer[1] = second;
+  modify_intr_pointer[2] = third;
+  modify_intr_pointer[3] = forth;
+  return 4;
+}
+
+static void
+emit_movt_movw_branch_thumb (intptr_t target, uint16_t *modify_intr_pointer,
+                             int bl)
+{
+  const uint16_t ip = 12;
+  uint16_t fifth;
+  emit_movt_movw_thumb (target, modify_intr_pointer, ip);
   {
     fifth = 0x8e << 7;
     fifth |= ip << 3;
   }
   fifth ^= (fifth & (1 << 7)) ^ ((bl & 1) << 7);
-  modify_intr_pointer[0] = first;
-  modify_intr_pointer[1] = second;
-  modify_intr_pointer[2] = third;
-  modify_intr_pointer[3] = forth;
   modify_intr_pointer[4] = fifth;
 }
 
-void
-emit_arm_movt_movw (intptr_t target, uint32_t *modify_intr_pointer, int bl)
+static int
+emit_movt_movw_arm (intptr_t target, uint32_t *modify_intr_pointer, int rn)
 {
-  const uint16_t ip = 12;
-  // use movw ,movt as above.
-  uint32_t first, second, third;
+  uint32_t first, second;
   uint32_t cond = 0xe; // always
   uint32_t lower_imm16 = (target & 0xffff);
   uint32_t higher_imm16 = static_cast<uintptr_t> (target & 0xffff0000) >> 16;
@@ -637,7 +698,7 @@ emit_arm_movt_movw (intptr_t target, uint32_t *modify_intr_pointer, int bl)
     first = cond << 28;
     first |= 0x30 << 20;
     first |= imm4 << 16;
-    first |= ip << 12;
+    first |= rn << 12;
     first |= imm12;
   }
   {
@@ -646,10 +707,23 @@ emit_arm_movt_movw (intptr_t target, uint32_t *modify_intr_pointer, int bl)
     second = cond << 28;
     second |= 0x34 << 20;
     second |= imm4 << 16;
-    second |= ip << 12;
+    second |= rn << 12;
     second |= imm12;
   }
+  modify_intr_pointer[0] = first;
+  modify_intr_pointer[1] = second;
+  return 2;
+}
 
+static void
+emit_movt_movw_branch_arm (intptr_t target, uint32_t *modify_intr_pointer,
+                           int bl)
+{
+  const uint16_t ip = 12;
+  // use movw ,movt as above.
+  uint32_t third;
+  uint32_t cond = 0xe; // always
+  emit_movt_movw_arm (target, modify_intr_pointer, ip);
   {
     third = cond << 28;
     third |= 0x12fff1 << 4;
@@ -657,8 +731,6 @@ emit_arm_movt_movw (intptr_t target, uint32_t *modify_intr_pointer, int bl)
   }
   third ^= (third & (1 << 5)) ^ ((bl & 1) << 5);
 
-  modify_intr_pointer[0] = first;
-  modify_intr_pointer[1] = second;
   modify_intr_pointer[2] = third;
 }
 
@@ -683,7 +755,8 @@ arm_target_client::modify_code (code_context *context)
       intptr_t target_code_point_2 = target_code_point & ~1UL;
       if (target_code_point_2 & 3UL)
         {
-          emit_thumb_movt_movw (trampoline_code_start, modify_intr_pointer, 0);
+          emit_movt_movw_branch_thumb (trampoline_code_start,
+                                       modify_intr_pointer, 0);
         }
       else
         {
@@ -735,7 +808,7 @@ handle_bl_thumb (char *&start, char *&write, intptr_t addr, bool is_blx)
     {
       addr |= 1;
     }
-  emit_thumb_movt_movw (addr, reinterpret_cast<uint16_t *> (write), 1);
+  emit_movt_movw_branch_thumb (addr, reinterpret_cast<uint16_t *> (write), 1);
   write += thumb_movt_movw_bytes;
 }
 
@@ -787,6 +860,26 @@ handle_b_thumb (char *&start, char *&write, intptr_t addr, int cond_code)
 }
 
 static void
+handle_addpc_thumb (char *&start, char *&write, intptr_t addr, int rn)
+{
+  start += 2;
+  // push rx; movt rx; movw rx; ldr rx, [rx]; add rn, rx;
+  // pop rx;
+  uint16_t *_write = reinterpret_cast<uint16_t *> (write);
+  int index = 0;
+  int rx = (rn + 1) % 8;
+  _write[index++] = 0xb400 | (1 << rx);
+  index += emit_movt_movw_thumb (addr, _write + index, rx);
+  // ldr
+  _write[index++] = 0x6800 | (rx << 3) | rx;
+  // add
+  _write[index++] = 0x1c00 | (rx << 3) | rn;
+  // pop
+  _write[index++] = 0xbc00 | (1 << rx);
+  write += sizeof (uint16_t) * index;
+}
+
+static void
 handle_thumb_entry (post_process_trampoline_desc &desc, char *&start,
                     char *&write)
 {
@@ -802,6 +895,9 @@ handle_thumb_entry (post_process_trampoline_desc &desc, char *&start,
     case B:
       handle_b_thumb (start, write, desc.addr, desc.un.b.cond_code);
       break;
+    case ADDPC:
+      handle_addpc_thumb (start, write, desc.addr, desc.un.add_pc.rn);
+      break;
     default:
       assert (false);
     }
@@ -811,7 +907,7 @@ static void
 handle_bl_arm (char *&start, char *&write, intptr_t addr, bool is_blx)
 {
   start += 4;
-  emit_arm_movt_movw (addr, reinterpret_cast<uint32_t *> (write), 1);
+  emit_movt_movw_branch_arm (addr, reinterpret_cast<uint32_t *> (write), 1);
   write += arm_movt_movw_bytes;
 }
 
@@ -842,6 +938,26 @@ handle_b_arm (char *&start, char *&write, intptr_t addr, int cond_code)
 }
 
 static void
+handle_addpc_arm (char *&start, char *&write, intptr_t addr, int rn)
+{
+  // push rx; movt rx; movw rx; ldr rx, [rx]; add rn, rx;
+  // pop rx;
+  start += 4;
+  int index = 0;
+  uint32_t *_write = reinterpret_cast<uint32_t *> (write);
+  int rx = (rn + 1) % 8;
+  _write[index++] = 0xe52d0004 | (rx << 12);
+  index += emit_movt_movw_arm (addr, _write + index, rx);
+  // ldr
+  _write[index++] = 0xe5900000 | (rx << 12) | (rx << 16);
+  // add rn, rx
+  _write[index++] = 0xe0800000 | (rn << 12) | (rx << 16);
+  // pop
+  _write[index++] = 0xe49d0004 | (rn << 12);
+  write += index * sizeof (uint32_t);
+}
+
+static void
 handle_arm_entry (post_process_trampoline_desc &desc, char *&start,
                   char *&write)
 {
@@ -852,6 +968,9 @@ handle_arm_entry (post_process_trampoline_desc &desc, char *&start,
       break;
     case B:
       handle_b_arm (start, write, desc.addr, desc.un.b.cond_code);
+      break;
+    case ADDPC:
+      handle_addpc_arm (start, write, desc.addr, desc.un.add_pc.rn);
       break;
     default:
       assert (false);
