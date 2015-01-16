@@ -67,6 +67,7 @@ public:
                     pfn_called_callback called_callback,
                     pfn_ret_callback return_callback) = 0;
   virtual mem_modify_instr *modify_code (code_context *) = 0;
+  virtual char *last_check_code_fail_point () const = 0;
 };
 
 struct code_modify_desc

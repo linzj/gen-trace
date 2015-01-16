@@ -38,6 +38,7 @@ private:
                     pfn_called_callback called_callback,
                     pfn_ret_callback return_callback);
   virtual mem_modify_instr *modify_code (code_context *);
+  virtual char *last_check_code_fail_point () const;
   void check_env ();
 
   uint64_t env_;
@@ -84,6 +85,12 @@ perf_target_client::build_trampoline (code_manager *p1, code_context *p2,
   build_trampoline_ += elapse;
   check_env ();
   return status;
+}
+
+char *
+perf_target_client::last_check_code_fail_point () const
+{
+  return real_->last_check_code_fail_point ();
 }
 
 mem_modify_instr *
@@ -167,8 +174,19 @@ code_modify (const code_modify_desc *code_points, int count_of,
       else
         {
           if (fp_for_fail)
-            fprintf (fp_for_fail, "check code: %p, %s, %d\n", code_point, name,
-                     check_code_status);
+            {
+              if (check_code_status != target_client::check_code_not_accept)
+                {
+                  fprintf (fp_for_fail, "check code: %p, %s, %d\n", code_point,
+                           name, check_code_status);
+                }
+              else
+                {
+                  fprintf (fp_for_fail, "check code not accept: %p, %s, %p\n",
+                           code_point, name,
+                           g_client->last_check_code_fail_point ());
+                }
+            }
         }
     }
   if (fp_for_fail)

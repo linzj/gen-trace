@@ -46,6 +46,7 @@ base_target_client::check_code (void *code_point, const char *name,
     }
   if (code_check_client->is_accept () == false)
     {
+      last_check_code_fail_point_ = start;
       return check_code_not_accept;
     }
   if (!check_for_back_edge (dis.get (), static_cast<char *> (code_point),
@@ -178,4 +179,10 @@ void
 base_target_client::release_machine_define2 (code_context *context)
 {
   context->machine_defined2 = NULL;
+}
+
+char *
+base_target_client::last_check_code_fail_point () const
+{
+  return last_check_code_fail_point_;
 }

@@ -16,6 +16,7 @@ private:
   build_trampoline (code_manager *, code_context *,
                     pfn_called_callback called_callback,
                     pfn_ret_callback return_callback);
+  virtual char *last_check_code_fail_point () const;
 
 protected:
   virtual int byte_needed_to_modify (intptr_t target_code_point) = 0;
@@ -46,5 +47,6 @@ private:
   bool check_for_back_edge (disassembler *, char *start, char *hook_end,
                             char *code_end);
   friend class release_machine_define2_helper;
+  char *last_check_code_fail_point_;
 };
 #endif /* BASE_TARGET_CLIENT_H */

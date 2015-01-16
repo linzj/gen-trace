@@ -45,6 +45,12 @@ private:
     return instr;
   }
 
+  virtual char *
+  last_check_code_fail_point () const
+  {
+    return NULL;
+  }
+
 public:
   bool
   isOkay ()
