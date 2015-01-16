@@ -2,6 +2,7 @@
 #define CODE_MODIFY_H
 #pragma once
 #include <stddef.h>
+#include <memory>
 struct mem_modify_instr;
 typedef void (*pfn_called_callback)(void *original_ret, const char *name);
 typedef void *(*pfn_ret_callback)(const char *name);
@@ -39,6 +40,38 @@ public:
   // FIXME: need a delete code mem function.
 };
 
+class target_session
+{
+public:
+  target_session ();
+  ~target_session ();
+
+  inline char *
+  last_check_code_fail_point ()
+  {
+    return last_check_code_fail_point_;
+  }
+  inline void
+  set_last_check_code_fail_point (char *p)
+  {
+    last_check_code_fail_point_ = p;
+  }
+  inline void
+  set_code_context (code_context *context)
+  {
+    context_ = context;
+  }
+  inline struct code_context *
+  code_context ()
+  {
+    return context_;
+  }
+
+private:
+  char *last_check_code_fail_point_;
+  struct code_context *context_;
+};
+
 class target_client
 {
 public:
@@ -59,15 +92,16 @@ public:
   };
   virtual ~target_client ();
 
+  virtual std::unique_ptr<target_session> create_session () = 0;
   // check if code accept to modify, and turn the context via the 2nd argument.
   virtual check_code_status check_code (void *, const char *, int code_size,
-                                        code_manager *, code_context **) = 0;
+                                        code_manager *,
+                                        target_session *session) = 0;
   virtual build_trampoline_status
-  build_trampoline (code_manager *, code_context *,
+  build_trampoline (code_manager *, target_session *session,
                     pfn_called_callback called_callback,
                     pfn_ret_callback return_callback) = 0;
-  virtual mem_modify_instr *modify_code (code_context *) = 0;
-  virtual char *last_check_code_fail_point () const = 0;
+  virtual mem_modify_instr *modify_code (target_session *) = 0;
 };
 
 struct code_modify_desc

@@ -23,10 +23,16 @@ base_target_client::check_for_back_edge (disassembler *dis, char *start,
   return backedge_check_client->is_accept ();
 }
 
+std::unique_ptr<target_session>
+base_target_client::create_session ()
+{
+  return std::unique_ptr<target_session> (new target_session);
+}
+
 target_client::check_code_status
 base_target_client::check_code (void *code_point, const char *name,
                                 int code_size, code_manager *m,
-                                code_context **ppcontext)
+                                target_session *session)
 {
   std::unique_ptr<check_code_dis_client> code_check_client (
       new_code_check_client (code_point));
@@ -46,7 +52,7 @@ base_target_client::check_code (void *code_point, const char *name,
     }
   if (code_check_client->is_accept () == false)
     {
-      last_check_code_fail_point_ = start;
+      session->set_last_check_code_fail_point (start);
       return check_code_not_accept;
     }
   if (!check_for_back_edge (dis.get (), static_cast<char *> (code_point),
@@ -63,7 +69,7 @@ base_target_client::check_code (void *code_point, const char *name,
   context->code_len_to_replace = current;
   context->lowered_original_code_len
       = code_check_client->lowered_original_code_len (current);
-  *ppcontext = context;
+  session->set_code_context (context);
   if (!build_machine_define2 (context, code_check_client.get ()))
     {
       return check_code_build_machine_define2;
@@ -90,10 +96,11 @@ private:
 };
 
 target_client::build_trampoline_status
-base_target_client::build_trampoline (code_manager *m, code_context *context,
+base_target_client::build_trampoline (code_manager *m, target_session *session,
                                       pfn_called_callback called_callback,
                                       pfn_ret_callback return_callback)
 {
+  code_context *context = session->code_context ();
   release_machine_define2_helper _dummy (context, this);
   const intptr_t target_code_point
       = reinterpret_cast<intptr_t> (context->code_point);
@@ -179,10 +186,4 @@ void
 base_target_client::release_machine_define2 (code_context *context)
 {
   context->machine_defined2 = NULL;
-}
-
-char *
-base_target_client::last_check_code_fail_point () const
-{
-  return last_check_code_fail_point_;
 }

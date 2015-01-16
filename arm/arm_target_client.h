@@ -21,7 +21,7 @@ private:
   virtual void flush_code (void *code_start, int len);
   virtual void copy_original_code (void *trampoline_code_start,
                                    code_context *context);
-  virtual mem_modify_instr *modify_code (code_context *);
+  virtual mem_modify_instr *modify_code (target_session *);
   virtual bool use_target_code_point_as_hint (void);
   virtual bool build_machine_define2 (code_context *context,
                                       dis_client *code_check_client);

@@ -136,8 +136,9 @@ x64_test_back_egde_client::on_addr (intptr_t ref)
 }
 
 mem_modify_instr *
-x64_target_client::modify_code (code_context *context)
+x64_target_client::modify_code (target_session *session)
 {
+  code_context *context = session->code_context ();
   const intptr_t target_code_point
       = reinterpret_cast<intptr_t> (context->code_point);
   int code_len_to_replace = context->code_len_to_replace;

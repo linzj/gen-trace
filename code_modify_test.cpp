@@ -9,21 +9,26 @@ class test_target_client : public target_client
 public:
 private:
   char to_modify[9];
+  virtual std::unique_ptr<target_session>
+  create_session ()
+  {
+    return std::unique_ptr<target_session> (new target_session);
+  }
   virtual check_code_status
   check_code (void *target, const char *name, int code_size,
-              code_manager *code_manager, code_context **ppcontext)
+              code_manager *code_manager, target_session *session)
   {
     code_context *context;
-    *ppcontext = context = code_manager->new_context (name);
+    session->set_code_context ((context = code_manager->new_context (name)));
     context->code_point = target;
     return check_code_okay;
   }
   virtual build_trampoline_status
-  build_trampoline (code_manager *code_manager, code_context *context,
+  build_trampoline (code_manager *code_manager, target_session *session,
                     pfn_called_callback called_callback,
                     pfn_ret_callback return_callback)
   {
-    code_context *c = context;
+    code_context *c = session->code_context ();
     assert (c != 0);
     void *code = code_manager->new_code_mem (NULL, 9);
     assert (code != 0);
@@ -34,7 +39,7 @@ private:
     return build_trampoline_okay;
   }
   virtual mem_modify_instr *
-  modify_code (code_context *context)
+  modify_code (target_session *target_session)
   {
     mem_modify_instr *instr = static_cast<mem_modify_instr *> (
         calloc (1, sizeof (mem_modify_instr) + 9));
@@ -43,12 +48,6 @@ private:
     instr->size = 9;
     memcpy (instr->data, "123456789", 9);
     return instr;
-  }
-
-  virtual char *
-  last_check_code_fail_point () const
-  {
-    return NULL;
   }
 
 public:

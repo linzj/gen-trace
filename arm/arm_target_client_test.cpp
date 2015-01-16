@@ -24,35 +24,39 @@ main ()
   {
     arm_target_client arm_target_client;
     target_client *target_client = &arm_target_client;
-    code_context *cc;
+    std::unique_ptr<target_session> session
+        = std::move (target_client->create_session ());
     target_client::check_code_status c = target_client->check_code (
-        code, "test", sizeof (code), &code_manager, &cc);
+        code, "test", sizeof (code), &code_manager, session.get ());
     assert (target_client::check_code_okay == c);
+    code_context *cc = session->code_context ();
     assert (cc->code_point == &code[0]);
     assert (target_client::build_trampoline_okay
-            == target_client->build_trampoline (&code_manager, cc,
+            == target_client->build_trampoline (&code_manager, session.get (),
                                                 (pfn_called_callback)main,
                                                 (pfn_ret_callback)main));
     assert (cc->trampoline_code_start != 0);
-    mem_modify_instr *instr = target_client->modify_code (cc);
+    mem_modify_instr *instr = target_client->modify_code (session.get ());
     assert (instr);
     free (instr);
   }
   {
     arm_target_client arm_target_client;
     target_client *target_client = &arm_target_client;
-    code_context *cc;
+    std::unique_ptr<target_session> session
+        = std::move (target_client->create_session ());
     target_client::check_code_status c = target_client->check_code (
         reinterpret_cast<char *> (&code_thumb[0]) + 1, "test",
-        sizeof (code_thumb), &code_manager, &cc);
+        sizeof (code_thumb), &code_manager, session.get ());
     assert (target_client::check_code_okay == c);
+    code_context *cc = session->code_context ();
     assert (cc->code_point == reinterpret_cast<char *> (&code_thumb[0]) + 1);
     assert (target_client::build_trampoline_okay
-            == target_client->build_trampoline (&code_manager, cc,
+            == target_client->build_trampoline (&code_manager, session.get (),
                                                 (pfn_called_callback)main,
                                                 (pfn_ret_callback)main));
     assert (cc->trampoline_code_start != 0);
-    mem_modify_instr *instr = target_client->modify_code (cc);
+    mem_modify_instr *instr = target_client->modify_code (session.get ());
     assert (instr);
     free (instr);
   }

@@ -21,7 +21,7 @@ private:
   virtual void flush_code (void *code_start, int len);
   virtual void copy_original_code (void *trampoline_code_start,
                                    code_context *context);
-  virtual mem_modify_instr *modify_code (code_context *);
+  virtual mem_modify_instr *modify_code (target_session *);
   virtual void add_jump_to_original (char *code_start, int offset,
                                      code_context *code_context);
   virtual int jump_back_instr_len (code_context *);

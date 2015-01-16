@@ -31,14 +31,14 @@ public:
   }
 
 private:
+  virtual std::unique_ptr<target_session> create_session ();
   virtual check_code_status check_code (void *, const char *, int code_size,
-                                        code_manager *, code_context **);
+                                        code_manager *, target_session *);
   virtual build_trampoline_status
-  build_trampoline (code_manager *, code_context *,
+  build_trampoline (code_manager *, target_session *,
                     pfn_called_callback called_callback,
                     pfn_ret_callback return_callback);
-  virtual mem_modify_instr *modify_code (code_context *);
-  virtual char *last_check_code_fail_point () const;
+  virtual mem_modify_instr *modify_code (target_session *);
   void check_env ();
 
   uint64_t env_;
@@ -54,9 +54,15 @@ perf_target_client::perf_target_client ()
 {
 }
 
+std::unique_ptr<target_session>
+perf_target_client::create_session ()
+{
+  return real_->create_session ();
+}
+
 target_client::check_code_status
 perf_target_client::check_code (void *p1, const char *p2, int p3,
-                                code_manager *p4, code_context **p5)
+                                code_manager *p4, target_session *p5)
 {
   timespec t1, t2;
   clock_gettime (CLOCK_MONOTONIC, &t1);
@@ -71,7 +77,7 @@ perf_target_client::check_code (void *p1, const char *p2, int p3,
 }
 
 target_client::build_trampoline_status
-perf_target_client::build_trampoline (code_manager *p1, code_context *p2,
+perf_target_client::build_trampoline (code_manager *p1, target_session *p2,
                                       pfn_called_callback p3,
                                       pfn_ret_callback p4)
 {
@@ -87,14 +93,8 @@ perf_target_client::build_trampoline (code_manager *p1, code_context *p2,
   return status;
 }
 
-char *
-perf_target_client::last_check_code_fail_point () const
-{
-  return real_->last_check_code_fail_point ();
-}
-
 mem_modify_instr *
-perf_target_client::modify_code (code_context *p1)
+perf_target_client::modify_code (target_session *p1)
 {
   timespec t1, t2;
   clock_gettime (CLOCK_MONOTONIC, &t1);
@@ -141,7 +141,6 @@ code_modify (const code_modify_desc *code_points, int count_of,
     }
   for (int i = 0; i < count_of; ++i)
     {
-      code_context *context;
       void *code_point = code_points[i].code_point;
       const char *name = code_points[i].name;
       int size = code_points[i].size;
@@ -149,17 +148,19 @@ code_modify (const code_modify_desc *code_points, int count_of,
       // That means this code point should be ignored.
       if (code_point == NULL)
         continue;
+      std::unique_ptr<target_session> session
+          = std::move (g_client->create_session ());
       if (target_client::check_code_okay
           == (check_code_status = g_client->check_code (
-                  code_point, name, size, g_code_manager, &context)))
+                  code_point, name, size, g_code_manager, session.get ())))
         {
           target_client::build_trampoline_status build_trampoline_status;
           if (target_client::build_trampoline_okay
               == (build_trampoline_status = g_client->build_trampoline (
-                      g_code_manager, context, called_callback,
+                      g_code_manager, session.get (), called_callback,
                       return_callback)))
             {
-              mem_modify_instr *instr = g_client->modify_code (context);
+              mem_modify_instr *instr = g_client->modify_code (session.get ());
               v.push_back (instr);
               if (fp_for_fail)
                 fprintf (fp_for_fail, "build okay: %p, %s\n", code_point,
@@ -184,7 +185,7 @@ code_modify (const code_modify_desc *code_points, int count_of,
                 {
                   fprintf (fp_for_fail, "check code not accept: %p, %s, %p\n",
                            code_point, name,
-                           g_client->last_check_code_fail_point ());
+                           session->last_check_code_fail_point ());
                 }
             }
         }
@@ -244,3 +245,10 @@ code_modify_set_log_for_fail (const char *log_for_fail_name)
     return;
   g_log_for_fail = log_for_fail_name;
 }
+
+target_session::target_session ()
+    : last_check_code_fail_point_ (NULL), context_ (NULL)
+{
+}
+
+target_session::~target_session () {}

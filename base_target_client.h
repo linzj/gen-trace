@@ -10,13 +10,13 @@ class disassembler;
 class base_target_client : public target_client
 {
 private:
+  virtual std::unique_ptr<target_session> create_session ();
   virtual check_code_status check_code (void *, const char *, int code_size,
-                                        code_manager *, code_context **);
+                                        code_manager *, target_session *);
   virtual build_trampoline_status
-  build_trampoline (code_manager *, code_context *,
+  build_trampoline (code_manager *, target_session *,
                     pfn_called_callback called_callback,
                     pfn_ret_callback return_callback);
-  virtual char *last_check_code_fail_point () const;
 
 protected:
   virtual int byte_needed_to_modify (intptr_t target_code_point) = 0;
@@ -47,6 +47,5 @@ private:
   bool check_for_back_edge (disassembler *, char *start, char *hook_end,
                             char *code_end);
   friend class release_machine_define2_helper;
-  char *last_check_code_fail_point_;
 };
 #endif /* BASE_TARGET_CLIENT_H */

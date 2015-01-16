@@ -26,17 +26,19 @@ main ()
   code_manager_impl code_manager;
   x64_target_client x64_target_client;
   target_client *target_client = &x64_target_client;
-  code_context *cc;
+  std::unique_ptr<target_session> session
+      = std::move (target_client->create_session ());
   assert (target_client::check_code_okay
           == target_client->check_code (data, "test", sizeof (data),
-                                        &code_manager, &cc));
+                                        &code_manager, session.get ()));
+  code_context *cc = session->code_context ();
   assert (cc->code_point == &data[0]);
   assert (target_client::build_trampoline_okay
-          == target_client->build_trampoline (&code_manager, cc,
+          == target_client->build_trampoline (&code_manager, session.get (),
                                               (pfn_called_callback)main,
                                               (pfn_ret_callback)main));
   assert (cc->trampoline_code_start != 0);
-  mem_modify_instr *instr = target_client->modify_code (cc);
+  mem_modify_instr *instr = target_client->modify_code (session.get ());
   assert (instr);
   free (instr);
 }
