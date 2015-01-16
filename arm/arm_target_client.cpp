@@ -197,7 +197,6 @@ arm_dis_client::on_instr_1 (const char *dis_str, char *start, size_t s)
 {
   bool check_pass = false;
   bool pc_showup = false;
-  bool mem_operator = false;
   // check the instr.
   enum instr_type
   {
@@ -269,16 +268,11 @@ arm_dis_client::on_instr_1 (const char *dis_str, char *start, size_t s)
       is_accept_ = false;
       return;
     }
-  char *operand, *operand2 = NULL;
+  char *operand;
   if ((operand = strchr (dis_str, '\t')))
     {
       *operand = '\0';
       operand += 1;
-      operand2 = strchr (operand, ',');
-      if (operand2)
-        {
-          operand2 += 2;
-        }
       if (strstr (operand, "ip"))
         {
           ip_appears_ = true;
@@ -288,10 +282,6 @@ arm_dis_client::on_instr_1 (const char *dis_str, char *start, size_t s)
       if (strstr (operand, "pc"))
         {
           pc_showup = true;
-        }
-      if (operand[0] == '[' || (operand2 && operand2[0] == '['))
-        {
-          mem_operator = true;
         }
     }
   // check if pc position independent code is here.
@@ -407,42 +397,8 @@ arm_dis_client::on_instr_1 (const char *dis_str, char *start, size_t s)
         }
       else if (pc_showup)
         {
-          // FIXME:NOT support ldr rx, [pc,x] now;
-          if (mem_operator || instr_type != ADD_TYPE || operand[0] != 'r')
-            {
-              is_accept_ = false;
-              break;
-            }
-          if (dis_str[3] != '\0')
-            {
-              // conditional add not supported
-              is_accept_ = false;
-              break;
-            }
-          assert (last_addr_ != -1);
-          int rn = operand[1] - '0';
-          // not supported rn > 7 when thumb
-          if (rn > 7 && is_thumb_)
-            {
-              is_accept_ = false;
-              break;
-            }
-          post_process_trampoline_desc desc = { CB, offset_, last_addr_ };
-          desc.un.add_pc.rn = rn;
-          ensure_desc ();
-          desc_->push_back (desc);
-          // push rx; movt rx; movw rx; ldr rx, [rx]; add rn, rx;
-          // pop rx;
-          int offset_add_end;
-          if (is_thumb_)
-            {
-              offset_add_end = 2 + 4 + 4 + 2 + 2 + 2;
-            }
-          else
-            {
-              offset_add_end = 6 * 4;
-            }
-          lowered_original_code_len_ += offset_add_end - s;
+          // FIXME: not able to handle pc show up
+          is_accept_ = false;
         }
     }
   while (false);
