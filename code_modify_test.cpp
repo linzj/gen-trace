@@ -14,14 +14,29 @@ private:
   {
     return std::unique_ptr<target_session> (new target_session);
   }
-  virtual check_code_status
-  check_code (void *target, const char *name, int code_size,
-              code_manager *code_manager, target_session *session)
+  check_code_result_buffer *
+  alloc_check_code_result_buffer (void *code_point, const char *name,
+                                  enum check_code_status status, size_t s)
   {
-    code_context *context;
-    session->set_code_context ((context = code_manager->new_context (name)));
-    context->code_point = target;
-    return check_code_okay;
+    check_code_result_buffer *b = static_cast<check_code_result_buffer *> (
+        malloc (s + sizeof (check_code_result_buffer)));
+    if (!b)
+      {
+        return nullptr;
+      }
+    b->code_point = code_point;
+    b->name = name;
+    b->status = status;
+    b->size = s;
+    b->lowered_original_code_len = 5;
+    b->code_len_to_replace = 5;
+    return b;
+  }
+  virtual check_code_result_buffer *
+  check_code (void *code_point, const char *name, int code_size)
+  {
+    return alloc_check_code_result_buffer (code_point, name, check_code_okay,
+                                           0);
   }
   virtual build_trampoline_status
   build_trampoline (code_manager *code_manager, target_session *session,

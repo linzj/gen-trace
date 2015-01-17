@@ -92,6 +92,8 @@ private:
   void on_instr_1 (const char *, char *start, size_t s);
   virtual void on_addr (intptr_t);
   virtual int lowered_original_code_len (int);
+  virtual size_t extend_buffer_size ();
+  virtual void fill_buffer (void *);
   void commit_desc (const post_process_trampoline_desc &desc);
   void advance (size_t);
   bool is_accept_;
@@ -136,6 +138,28 @@ arm_dis_client::on_instr (const char *dis_str, char *start, size_t s)
   on_instr_1 (dis_str, start, s);
   last_addr_ = -1;
   advance (s);
+}
+
+size_t
+arm_dis_client::extend_buffer_size ()
+{
+  if (!desc_.get ())
+    {
+      return 0;
+    }
+  return sizeof (post_process_trampoline_desc) * desc_->size ();
+}
+
+void
+arm_dis_client::fill_buffer (void *b)
+{
+  assert (desc_.get () != nullptr);
+  char *b_1 = static_cast<char *> (b);
+  for (auto &e : *desc_)
+    {
+      memcpy (b_1, &e, sizeof (post_process_trampoline_desc));
+      b_1 += sizeof (post_process_trampoline_desc);
+    }
 }
 
 static inline bool
@@ -824,9 +848,10 @@ mem_modify_instr *
 arm_target_client::modify_code (target_session *session)
 {
   code_context *context = session->code_context ();
+  check_code_result_buffer *b = session->check_code_result_buffer ();
   const intptr_t target_code_point
       = reinterpret_cast<intptr_t> (context->code_point);
-  int code_len_to_replace = context->code_len_to_replace;
+  int code_len_to_replace = b->code_len_to_replace;
   mem_modify_instr *instr = static_cast<mem_modify_instr *> (
       malloc (sizeof (mem_modify_instr) + code_len_to_replace - 1));
   instr->where = (void *)(target_code_point & static_cast<intptr_t> (~1));
@@ -1110,12 +1135,11 @@ handle_arm_entry (post_process_trampoline_desc &desc, char *&start,
 
 void
 arm_target_client::copy_original_code (void *trampoline_code_start,
-                                       code_context *context)
+                                       check_code_result_buffer *b)
 {
-  void *target_code_point = context->code_point;
-  int len = context->code_len_to_replace;
-  desc_vector *descs = static_cast<desc_vector *> (context->machine_defined2);
-  if (!descs)
+  void *target_code_point = b->code_point;
+  int len = b->code_len_to_replace;
+  if (!b->size)
     {
       intptr_t target_code_point_i
           = reinterpret_cast<intptr_t> (target_code_point);
@@ -1124,26 +1148,29 @@ arm_target_client::copy_original_code (void *trampoline_code_start,
               reinterpret_cast<void *> (target_code_point_i), len);
       return;
     }
-  assert (descs->empty () == false);
+
   char *_target_code_point = reinterpret_cast<char *> (
       reinterpret_cast<intptr_t> (target_code_point) & ~1UL);
 
   char *start = _target_code_point;
   char *write = static_cast<char *> (trampoline_code_start);
   bool is_thumb = (reinterpret_cast<intptr_t> (target_code_point) & 1) != 0;
-  for (desc_vector::iterator i = descs->begin (); i != descs->end (); ++i)
+  size_t count = b->size / sizeof (post_process_trampoline_desc);
+  post_process_trampoline_desc *descs
+      = reinterpret_cast<post_process_trampoline_desc *> (b + 1);
+  for (size_t i = 0; i < count; ++i)
     {
-      char *end = _target_code_point + i->offset;
+      char *end = _target_code_point + descs[i].offset;
       memcpy (write, start, reinterpret_cast<int> (end - start));
       write += reinterpret_cast<int> (end - start);
       start = end;
       if (is_thumb)
         {
-          handle_thumb_entry (*i, start, write);
+          handle_thumb_entry (descs[i], start, write);
         }
       else
         {
-          handle_arm_entry (*i, start, write);
+          handle_arm_entry (descs[i], start, write);
         }
     }
 
@@ -1155,25 +1182,6 @@ bool
 arm_target_client::use_target_code_point_as_hint (void)
 {
   return false;
-}
-
-bool
-arm_target_client::build_machine_define2 (code_context *context,
-                                          dis_client *code_check_client)
-{
-  arm_dis_client *real_client
-      = static_cast<arm_dis_client *> (code_check_client);
-  context->machine_defined2 = real_client->desc_.release ();
-  return true;
-}
-
-void
-arm_target_client::release_machine_define2 (code_context *context)
-{
-  if (context->machine_defined2)
-    {
-      delete static_cast<desc_vector *> (context->machine_defined2);
-    }
 }
 
 void

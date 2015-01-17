@@ -29,10 +29,9 @@ base_target_client::create_session ()
   return std::unique_ptr<target_session> (new target_session);
 }
 
-target_client::check_code_status
+check_code_result_buffer *
 base_target_client::check_code (void *code_point, const char *name,
-                                int code_size, code_manager *m,
-                                target_session *session)
+                                int code_size)
 {
   std::unique_ptr<check_code_dis_client> code_check_client (
       new_code_check_client (code_point));
@@ -43,7 +42,8 @@ base_target_client::check_code (void *code_point, const char *name,
   char *start = static_cast<char *> (code_point);
   int current = 0;
   if (code_size < _byte_needed_to_modify)
-    return check_code_too_small;
+    return alloc_check_code_result_buffer (code_point, name,
+                                           check_code_too_small, 0);
   while (current < _byte_needed_to_modify && code_check_client->is_accept ())
     {
       int len = dis->instruction_decode (start);
@@ -52,48 +52,22 @@ base_target_client::check_code (void *code_point, const char *name,
     }
   if (code_check_client->is_accept () == false)
     {
-      session->set_last_check_code_fail_point (start);
-      return check_code_not_accept;
+      check_code_result_buffer *b = alloc_check_code_result_buffer (
+          code_point, name, check_code_not_accept, sizeof (intptr_t));
+      *reinterpret_cast<intptr_t *> (b + 1)
+          = reinterpret_cast<intptr_t> (start);
+      return b;
     }
   if (!check_for_back_edge (dis.get (), static_cast<char *> (code_point),
                             start,
                             static_cast<char *> (code_point) + code_size))
     {
-      return check_code_back_edge;
+      return alloc_check_code_result_buffer (code_point, name,
+                                             check_code_back_edge, 0);
     }
-  code_context *context;
-  context = m->new_context (name);
-  if (context == NULL)
-    return check_code_memory;
-  context->code_point = code_point;
-  context->code_len_to_replace = current;
-  context->lowered_original_code_len
-      = code_check_client->lowered_original_code_len (current);
-  session->set_code_context (context);
-  if (!build_machine_define2 (context, code_check_client.get ()))
-    {
-      return check_code_build_machine_define2;
-    }
-  return check_code_okay;
+  return build_check_okay (code_point, name, current,
+                           code_check_client.get ());
 }
-
-class release_machine_define2_helper
-{
-public:
-  release_machine_define2_helper (code_context *context,
-                                  base_target_client *client)
-      : context_ (context), client_ (client)
-  {
-  }
-  ~release_machine_define2_helper ()
-  {
-    client_->release_machine_define2 (context_);
-  }
-
-private:
-  code_context *context_;
-  base_target_client *client_;
-};
 
 target_client::build_trampoline_status
 base_target_client::build_trampoline (code_manager *m, target_session *session,
@@ -101,14 +75,14 @@ base_target_client::build_trampoline (code_manager *m, target_session *session,
                                       pfn_ret_callback return_callback)
 {
   code_context *context = session->code_context ();
-  release_machine_define2_helper _dummy (context, this);
+  check_code_result_buffer *b = session->check_code_result_buffer ();
   const intptr_t target_code_point
       = reinterpret_cast<intptr_t> (context->code_point);
   char *const _template_start = template_start (target_code_point);
   char *const _template_end = template_end (target_code_point);
   const int template_code_size
       = (char *)_template_end - (char *)_template_start
-        + context->lowered_original_code_len + jump_back_instr_len (context);
+        + b->lowered_original_code_len + jump_back_instr_len (context);
   int template_size = template_code_size + sizeof (intptr_t) * 4;
   template_size = (template_size + sizeof (intptr_t) - 1)
                   & ~(sizeof (intptr_t) - 1);
@@ -119,7 +93,7 @@ base_target_client::build_trampoline (code_manager *m, target_session *session,
     }
   else
     {
-      hint = NULL;
+      hint = nullptr;
     }
   void *code_mem = m->new_code_mem (hint, template_size);
   if (!code_mem)
@@ -146,8 +120,8 @@ base_target_client::build_trampoline (code_manager *m, target_session *session,
   char *copy_start = reinterpret_cast<char *> (code_start)
                      + template_code_size_no_copy;
 
-  copy_original_code (copy_start, context);
-  int lowered_original_code_len = context->lowered_original_code_len;
+  copy_original_code (copy_start, b);
+  int lowered_original_code_len = b->lowered_original_code_len;
   add_jump_to_original (copy_start + lowered_original_code_len,
                         -(lowered_original_code_len
                           + template_code_size_no_copy
@@ -160,8 +134,8 @@ base_target_client::build_trampoline (code_manager *m, target_session *session,
       = static_cast<const void **> (context->trampoline_code_start);
   modify_pointer[-4] = function_name;
   modify_pointer[-3] = (void *)called_callback;
-  modify_pointer[-2] = reinterpret_cast<void *> (
-      target_code_point + context->code_len_to_replace);
+  modify_pointer[-2]
+      = reinterpret_cast<void *> (target_code_point + b->code_len_to_replace);
   modify_pointer[-1] = (void *)return_callback;
 
   flush_code (code_mem, template_size);
@@ -174,16 +148,36 @@ base_target_client::use_target_code_point_as_hint (void)
   return true;
 }
 
-bool
-base_target_client::build_machine_define2 (code_context *context,
-                                           dis_client *code_check_client)
+check_code_result_buffer *
+base_target_client::build_check_okay (void *code, const char *name,
+                                      int code_len_to_replace,
+                                      check_code_dis_client *code_check_client)
 {
-  context->machine_defined2 = reinterpret_cast<void *> (-1);
-  return true;
+  size_t s = code_check_client->extend_buffer_size ();
+  check_code_result_buffer *b
+      = alloc_check_code_result_buffer (code, name, check_code_okay, s);
+  b->code_len_to_replace = code_len_to_replace;
+  b->lowered_original_code_len
+      = code_check_client->lowered_original_code_len (code_len_to_replace);
+  if (s != 0)
+    code_check_client->fill_buffer (b + 1);
+  return b;
 }
 
-void
-base_target_client::release_machine_define2 (code_context *context)
+check_code_result_buffer *
+base_target_client::alloc_check_code_result_buffer (
+    void *code_point, const char *name,
+    enum target_client::check_code_status status, size_t s)
 {
-  context->machine_defined2 = NULL;
+  check_code_result_buffer *b = static_cast<check_code_result_buffer *> (
+      malloc (s + sizeof (check_code_result_buffer)));
+  if (!b)
+    {
+      return nullptr;
+    }
+  b->code_point = code_point;
+  b->name = name;
+  b->status = status;
+  b->size = s;
+  return b;
 }

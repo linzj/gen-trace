@@ -11,8 +11,8 @@ class base_target_client : public target_client
 {
 private:
   virtual std::unique_ptr<target_session> create_session ();
-  virtual check_code_status check_code (void *, const char *, int code_size,
-                                        code_manager *, target_session *);
+  virtual check_code_result_buffer *check_code (void *, const char *,
+                                                int code_size);
   virtual build_trampoline_status
   build_trampoline (code_manager *, target_session *,
                     pfn_called_callback called_callback,
@@ -30,7 +30,7 @@ protected:
                                 intptr_t trampoline_code_start) = 0;
   virtual void flush_code (void *code_start, int len) = 0;
   virtual void copy_original_code (void *trampoline_code_start,
-                                   code_context *context) = 0;
+                                   check_code_result_buffer *b) = 0;
   virtual void add_jump_to_original (char *code_start, int offset,
                                      code_context *code_context) = 0;
   virtual int jump_back_instr_len (code_context *) = 0;
@@ -39,13 +39,18 @@ protected:
   // using pc, and need target code point as hint.
   // Default implementation will return true.
   virtual bool use_target_code_point_as_hint (void);
-  virtual bool build_machine_define2 (code_context *context,
-                                      dis_client *code_check_client);
-  virtual void release_machine_define2 (code_context *context);
+
+protected:
+  check_code_result_buffer *
+  alloc_check_code_result_buffer (void *code_point, const char *name,
+                                  enum check_code_status status, size_t s);
 
 private:
   bool check_for_back_edge (disassembler *, char *start, char *hook_end,
                             char *code_end);
+  check_code_result_buffer *
+  build_check_okay (void *code, const char *name, int code_len_to_replace,
+                    check_code_dis_client *code_check_client);
   friend class release_machine_define2_helper;
 };
 #endif /* BASE_TARGET_CLIENT_H */

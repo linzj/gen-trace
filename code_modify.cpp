@@ -12,6 +12,9 @@
 #include <inttypes.h>
 #define USE_PERF 1
 
+typedef std::vector<mem_modify_instr *> instr_vector;
+typedef std::vector<check_code_result_buffer *> check_result_vector;
+
 target_client::~target_client () {}
 
 class perf_target_client;
@@ -32,8 +35,8 @@ public:
 
 private:
   virtual std::unique_ptr<target_session> create_session ();
-  virtual check_code_status check_code (void *, const char *, int code_size,
-                                        code_manager *, target_session *);
+  virtual check_code_result_buffer *check_code (void *, const char *,
+                                                int code_size);
   virtual build_trampoline_status
   build_trampoline (code_manager *, target_session *,
                     pfn_called_callback called_callback,
@@ -50,7 +53,7 @@ private:
 
 perf_target_client::perf_target_client ()
     : env_ (0), check_code_ (0), build_trampoline_ (0), modify_code_ (0),
-      real_ (NULL)
+      real_ (nullptr)
 {
 }
 
@@ -60,20 +63,19 @@ perf_target_client::create_session ()
   return real_->create_session ();
 }
 
-target_client::check_code_status
-perf_target_client::check_code (void *p1, const char *p2, int p3,
-                                code_manager *p4, target_session *p5)
+check_code_result_buffer *
+perf_target_client::check_code (void *p1, const char *p2, int p3)
 {
   timespec t1, t2;
   clock_gettime (CLOCK_MONOTONIC, &t1);
-  check_code_status status = real_->check_code (p1, p2, p3, p4, p5);
+  auto r = real_->check_code (p1, p2, p3);
   clock_gettime (CLOCK_MONOTONIC, &t2);
   uint64_t elapse = (t2.tv_sec - t1.tv_sec) * 1e9 + (t2.tv_nsec - t2.tv_nsec);
   elapse /= 1000;
   env_ += elapse;
   check_code_ += elapse;
   check_env ();
-  return status;
+  return r;
 }
 
 target_client::build_trampoline_status
@@ -124,6 +126,16 @@ perf_target_client::check_env ()
     }
 }
 
+static void
+free_check_results (check_result_vector &check_results)
+{
+  for (auto r : check_results)
+    {
+      free (r);
+    }
+  check_results.resize (0);
+}
+
 int
 code_modify (const code_modify_desc *code_points, int count_of,
              pfn_called_callback called_callback,
@@ -131,9 +143,9 @@ code_modify (const code_modify_desc *code_points, int count_of,
 {
   assert (g_client);
   assert (g_code_manager);
-  typedef std::vector<mem_modify_instr *> instr_vector;
   instr_vector v;
-  FILE *fp_for_fail = NULL;
+  check_result_vector check_results;
+  FILE *fp_for_fail = nullptr;
 
   if (g_log_for_fail)
     {
@@ -144,16 +156,31 @@ code_modify (const code_modify_desc *code_points, int count_of,
       void *code_point = code_points[i].code_point;
       const char *name = code_points[i].name;
       int size = code_points[i].size;
-      target_client::check_code_status check_code_status;
       // That means this code point should be ignored.
-      if (code_point == NULL)
+      if (code_point == nullptr)
         continue;
-      std::unique_ptr<target_session> session
-          = std::move (g_client->create_session ());
-      if (target_client::check_code_okay
-          == (check_code_status = g_client->check_code (
-                  code_point, name, size, g_code_manager, session.get ())))
+      check_code_result_buffer *b
+          = g_client->check_code (code_point, name, size);
+      if (b)
         {
+          check_results.push_back (b);
+        }
+    }
+  std::unique_ptr<target_session> session
+      = std::move (g_client->create_session ());
+
+  for (auto result : check_results)
+    {
+      void *code_point = result->code_point;
+      const char *name = result->name;
+      target_client::check_code_status check_code_status = result->status;
+      if (check_code_status == target_client::check_code_okay)
+        {
+          session->set_check_code_result_buffer (result);
+          session->set_code_context (
+              g_code_manager->new_context (result->name));
+          assert (session->code_context () != nullptr);
+          session->code_context ()->code_point = result->code_point;
           target_client::build_trampoline_status build_trampoline_status;
           if (target_client::build_trampoline_okay
               == (build_trampoline_status = g_client->build_trampoline (
@@ -185,7 +212,7 @@ code_modify (const code_modify_desc *code_points, int count_of,
                 {
                   fprintf (fp_for_fail, "check code not accept: %p, %s, %p\n",
                            code_point, name,
-                           session->last_check_code_fail_point ());
+                           *reinterpret_cast<char **> (result + 1));
                 }
             }
         }
@@ -194,6 +221,7 @@ code_modify (const code_modify_desc *code_points, int count_of,
     {
       fclose (fp_for_fail);
     }
+  free_check_results (check_results);
   if (v.size () == 0)
     return 0;
   // commit the instr.
@@ -222,11 +250,11 @@ code_modify (const code_modify_desc *code_points, int count_of,
 bool
 code_modify_init (target_client *client)
 {
-  if (g_client == NULL)
+  if (g_client == nullptr)
     g_client = client;
-  if (g_code_manager == NULL)
+  if (g_code_manager == nullptr)
     g_code_manager = new code_manager_impl ();
-  if (g_perf_target_client == NULL)
+  if (g_perf_target_client == nullptr)
     g_perf_target_client = new perf_target_client ();
 #ifdef USE_PERF
   if (g_client != g_perf_target_client)
@@ -235,7 +263,7 @@ code_modify_init (target_client *client)
       g_client = g_perf_target_client;
     }
 #endif
-  return g_client != NULL && g_code_manager != NULL;
+  return g_client != nullptr && g_code_manager != nullptr;
 }
 
 void
@@ -246,9 +274,6 @@ code_modify_set_log_for_fail (const char *log_for_fail_name)
   g_log_for_fail = log_for_fail_name;
 }
 
-target_session::target_session ()
-    : last_check_code_fail_point_ (NULL), context_ (NULL)
-{
-}
+target_session::target_session () : context_ (nullptr), buffer_ (nullptr) {}
 
 target_session::~target_session () {}

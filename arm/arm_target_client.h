@@ -20,12 +20,9 @@ private:
                                 intptr_t trampoline_code_start);
   virtual void flush_code (void *code_start, int len);
   virtual void copy_original_code (void *trampoline_code_start,
-                                   code_context *context);
+                                   check_code_result_buffer *b);
   virtual mem_modify_instr *modify_code (target_session *);
   virtual bool use_target_code_point_as_hint (void);
-  virtual bool build_machine_define2 (code_context *context,
-                                      dis_client *code_check_client);
-  virtual void release_machine_define2 (code_context *context);
   virtual void add_jump_to_original (char *code_start, int offset,
                                      code_context *code_context);
   virtual int jump_back_instr_len (code_context *);

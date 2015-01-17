@@ -20,7 +20,7 @@ private:
                                 intptr_t trampoline_code_start);
   virtual void flush_code (void *code_start, int len);
   virtual void copy_original_code (void *trampoline_code_start,
-                                   code_context *context);
+                                   check_code_result_buffer *b);
   virtual mem_modify_instr *modify_code (target_session *);
   virtual void add_jump_to_original (char *code_start, int offset,
                                      code_context *code_context);

@@ -24,3 +24,4 @@ if [ -z "$ANDROID_TOOLCHAIN" ]; then
 fi
 
 export PATH=$TOOLCHAIN_PATH:$PATH
+export GCC_VER=`arm-linux-androideabi-g++ --version | head -n 1 | awk '{print $3}'`

@@ -15,5 +15,7 @@ class check_code_dis_client : public dis_client
 {
 public:
   virtual int lowered_original_code_len (int code_len_to_replace) = 0;
+  virtual size_t extend_buffer_size () = 0;
+  virtual void fill_buffer (void *) = 0;
 };
 #endif /* DIS_CLIENT_H */

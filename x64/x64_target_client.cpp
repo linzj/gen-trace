@@ -38,6 +38,8 @@ private:
   virtual void on_instr (const char *, char *start, size_t s);
   virtual void on_addr (intptr_t);
   virtual int lowered_original_code_len (int code_len_to_replace);
+  virtual size_t extend_buffer_size ();
+  virtual void fill_buffer (void *);
   bool is_accept_;
 };
 
@@ -96,6 +98,18 @@ x64_dis_client::lowered_original_code_len (int code_len_to_replace)
   return code_len_to_replace;
 }
 
+size_t
+x64_dis_client::extend_buffer_size ()
+{
+  return 0;
+}
+
+void
+x64_dis_client::fill_buffer (void *)
+{
+  __builtin_unreachable ();
+}
+
 class x64_test_back_egde_client : public dis_client
 {
 public:
@@ -139,9 +153,10 @@ mem_modify_instr *
 x64_target_client::modify_code (target_session *session)
 {
   code_context *context = session->code_context ();
+  check_code_result_buffer *b = session->check_code_result_buffer ();
   const intptr_t target_code_point
       = reinterpret_cast<intptr_t> (context->code_point);
-  int code_len_to_replace = context->code_len_to_replace;
+  int code_len_to_replace = b->code_len_to_replace;
   mem_modify_instr *instr = static_cast<mem_modify_instr *> (
       malloc (sizeof (mem_modify_instr) + code_len_to_replace - 1));
   instr->where = context->code_point;
@@ -217,10 +232,10 @@ x64_target_client::flush_code (void *, int)
 
 void
 x64_target_client::copy_original_code (void *trampoline_code_start,
-                                       code_context *context)
+                                       check_code_result_buffer *b)
 {
-  void *target_code_point = context->code_point;
-  int len = context->code_len_to_replace;
+  void *target_code_point = b->code_point;
+  int len = b->code_len_to_replace;
   memcpy (trampoline_code_start, target_code_point, len);
 }
 

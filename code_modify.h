@@ -4,19 +4,14 @@
 #include <stddef.h>
 #include <memory>
 struct mem_modify_instr;
+struct check_code_result_buffer;
+
 typedef void (*pfn_called_callback)(void *original_ret, const char *name);
 typedef void *(*pfn_ret_callback)(const char *name);
 
 struct code_context
 {
   const char *function_name;
-  // code_len_to_replace describes the len of code
-  // is to be overwrited. It is not necessity equals
-  // to lowered_original_code_len, which is a lowered
-  // version of original code. Lowered means find the
-  // other way to interpret.
-  int code_len_to_replace;
-  int lowered_original_code_len;
   // the code point.
   // FIXME: needs to rename to target_code_point.
   void *code_point;
@@ -25,9 +20,6 @@ struct code_context
   void *trampoline_code_end;
   pfn_called_callback called_callback;
   pfn_ret_callback return_callback;
-  // This field is record the data by check code procedure,
-  // and released after build_trampoline.
-  void *machine_defined2;
 };
 
 class code_manager
@@ -46,16 +38,6 @@ public:
   target_session ();
   ~target_session ();
 
-  inline char *
-  last_check_code_fail_point ()
-  {
-    return last_check_code_fail_point_;
-  }
-  inline void
-  set_last_check_code_fail_point (char *p)
-  {
-    last_check_code_fail_point_ = p;
-  }
   inline void
   set_code_context (code_context *context)
   {
@@ -66,11 +48,23 @@ public:
   {
     return context_;
   }
+  inline void
+  set_check_code_result_buffer (check_code_result_buffer *b)
+  {
+    buffer_ = b;
+  }
+  inline struct check_code_result_buffer *
+  check_code_result_buffer ()
+  {
+    return buffer_;
+  }
 
 private:
-  char *last_check_code_fail_point_;
   struct code_context *context_;
+  struct check_code_result_buffer *buffer_;
 };
+
+struct code_modify_desc;
 
 class target_client
 {
@@ -94,14 +88,28 @@ public:
 
   virtual std::unique_ptr<target_session> create_session () = 0;
   // check if code accept to modify, and turn the context via the 2nd argument.
-  virtual check_code_status check_code (void *, const char *, int code_size,
-                                        code_manager *,
-                                        target_session *session) = 0;
+  virtual check_code_result_buffer *check_code (void *, const char *,
+                                                int code_size) = 0;
   virtual build_trampoline_status
   build_trampoline (code_manager *, target_session *session,
                     pfn_called_callback called_callback,
                     pfn_ret_callback return_callback) = 0;
   virtual mem_modify_instr *modify_code (target_session *) = 0;
+};
+
+struct check_code_result_buffer
+{
+  void *code_point;
+  const char *name;
+  target_client::check_code_status status;
+  size_t size;
+  // code_len_to_replace describes the len of code
+  // is to be overwrited. It is not necessity equals
+  // to lowered_original_code_len, which is a lowered
+  // version of original code. Lowered means find the
+  // other way to interpret.
+  int code_len_to_replace;
+  int lowered_original_code_len;
 };
 
 struct code_modify_desc

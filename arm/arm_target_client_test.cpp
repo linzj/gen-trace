@@ -26,10 +26,14 @@ main ()
     target_client *target_client = &arm_target_client;
     std::unique_ptr<target_session> session
         = std::move (target_client->create_session ());
-    target_client::check_code_status c = target_client->check_code (
-        code, "test", sizeof (code), &code_manager, session.get ());
-    assert (target_client::check_code_okay == c);
+    check_code_result_buffer *b = target_client->check_code (
+        reinterpret_cast<char *> (&code[0]), "test", sizeof (code));
+    assert (b && b->status == target_client::check_code_okay);
+    assert (strcmp (b->name, "test") == 0);
+    session->set_code_context (code_manager.new_context (b->name));
+    session->set_check_code_result_buffer (b);
     code_context *cc = session->code_context ();
+    cc->code_point = b->code_point;
     assert (cc->code_point == &code[0]);
     assert (target_client::build_trampoline_okay
             == target_client->build_trampoline (&code_manager, session.get (),
@@ -45,11 +49,14 @@ main ()
     target_client *target_client = &arm_target_client;
     std::unique_ptr<target_session> session
         = std::move (target_client->create_session ());
-    target_client::check_code_status c = target_client->check_code (
+    check_code_result_buffer *b = target_client->check_code (
         reinterpret_cast<char *> (&code_thumb[0]) + 1, "test",
-        sizeof (code_thumb), &code_manager, session.get ());
-    assert (target_client::check_code_okay == c);
+        sizeof (code_thumb));
+    assert (b && target_client::check_code_okay == b->status);
+    session->set_code_context (code_manager.new_context (b->name));
+    session->set_check_code_result_buffer (b);
     code_context *cc = session->code_context ();
+    cc->code_point = b->code_point;
     assert (cc->code_point == reinterpret_cast<char *> (&code_thumb[0]) + 1);
     assert (target_client::build_trampoline_okay
             == target_client->build_trampoline (&code_manager, session.get (),

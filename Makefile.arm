@@ -1,7 +1,7 @@
 .PHONY: all test
 NDK_PATH_SYSROOT := $(NDK_PATH)/platforms/android-14/arch-arm
-GNU_STL_PATH := -L$(NDK_PATH)/sources/cxx-stl/gnu-libstdc++/libs/armeabi-v7a/ -L$(NDK_PATH)/sources/cxx-stl/gnu-libstdc++/4.9/libs/armeabi-v7a/thumb/
-GNU_STL_INCLUDE := -I$(NDK_PATH)/sources/cxx-stl/gnu-libstdc++/4.9/include/  -I$(NDK_PATH)/sources/cxx-stl/gnu-libstdc++/4.9/libs/armeabi/include/
+GNU_STL_PATH := -L$(NDK_PATH)/sources/cxx-stl/gnu-libstdc++/libs/armeabi-v7a/ -L$(NDK_PATH)/sources/cxx-stl/gnu-libstdc++/$(GCC_VER)/libs/armeabi-v7a/thumb/
+GNU_STL_INCLUDE := -I$(NDK_PATH)/sources/cxx-stl/gnu-libstdc++/$(GCC_VER)/include/  -I$(NDK_PATH)/sources/cxx-stl/gnu-libstdc++/$(GCC_VER)/libs/armeabi/include/
 GNU_STL := -lgnustl_static
 all: libtrace.so
 TESTS := mem_modify_test \
