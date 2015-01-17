@@ -3,6 +3,7 @@
 #include <assert.h>
 #include <vector>
 #include <unordered_map>
+#include <errno.h>
 #include <string>
 #include "mem_modify.h"
 #include "arm_target_client.h"
@@ -32,6 +33,7 @@ enum post_process_trampoline_type
   B,
   ADDPC,
   LDRPC,
+  MOVADDR,
 };
 
 struct post_process_trampoline_desc
@@ -66,6 +68,10 @@ struct post_process_trampoline_desc
     {
       int rn;
     } ldr_pc;
+    struct
+    {
+      int rn;
+    } mov_addr;
   } un;
 };
 
@@ -204,7 +210,6 @@ is_branch (const char *str)
 void
 arm_dis_client::on_instr_1 (const char *dis_str, char *start, size_t s)
 {
-  std::string orig (dis_str);
   bool check_pass = false;
   bool pc_showup = false;
   // check the instr.
@@ -404,41 +409,125 @@ arm_dis_client::on_instr_1 (const char *dis_str, char *start, size_t s)
         }
       else if (pc_showup)
         {
-          // FIXME: only handle ldr rx,[pc,x]
-          if (instr_type != LDR_TYPE || operand[0] != 'r'
-              || is_conditional_code (dis_str + 3))
+          if (operand[0] != 'r' || is_conditional_code (dis_str + 3))
             {
               is_accept_ = false;
               break;
             }
-          if (last_addr_ == -1)
+          if (instr_type == LDR_TYPE)
             {
-              LOGE ("arm_dis_client::on_instr_1: dis_str: %s\n",
-                    orig.c_str ());
-            }
-          assert (last_addr_ != -1);
-          int rn = operand[1] - '0';
-          if (rn > 9)
-            {
-              is_accept_ = false;
-              break;
-            }
+              // ldr rn,[pc, #?] case
+              assert (last_addr_ != -1);
+              int rn = operand[1] - '0';
+              if (rn > 9)
+                {
+                  is_accept_ = false;
+                  break;
+                }
 
-          int offset_add_end;
-          if (is_thumb_)
+              int offset_add_end;
+              if (is_thumb_)
+                {
+                  // movt, movw, ldr.w
+                  offset_add_end = 4 + 4 + 4;
+                }
+              else
+                {
+                  // same.
+                  offset_add_end = 4 + 4 + 4;
+                }
+              post_process_trampoline_desc desc
+                  = { LDRPC, offset_, last_addr_, offset_add_end, s };
+              desc.un.ldr_pc.rn = rn;
+              commit_desc (desc);
+            }
+          else if (instr_type == ADD_TYPE)
             {
-              // movt, movw, ldr.w
-              offset_add_end = 4 + 4 + 4;
+              // add rn, pc, #? case
+              int rn = operand[1] - '0';
+              if (rn > 9)
+                {
+                  is_accept_ = false;
+                  break;
+                }
+              char *operand2 = NULL;
+              long offset = 0;
+              bool offset_exists = false;
+              do
+                {
+                  if ((operand2 = strchr (operand, ',')))
+                    {
+                      operand2 += 2;
+                      // if operand2 pc
+                      if (operand2[0] != 'p' || operand2[1] != 'c')
+                        {
+                          break;
+                        }
+                      char *operand3;
+                      if ((operand3 = strchr (operand2, ',')))
+                        {
+                          operand3 += 3;
+                          errno = 0;
+                          offset = strtol (operand3, NULL, 10);
+                          if (errno)
+                            {
+                              // failed.
+                              operand2 = NULL;
+                            }
+                          offset_exists = true;
+                        }
+                    }
+                }
+              while (false);
+              if (operand2 == NULL)
+                {
+                  is_accept_ = false;
+                  break;
+                }
+              int offset_add_end;
+              intptr_t addr = reinterpret_cast<intptr_t> (start) & ~1UL;
+              if (is_thumb_)
+                {
+                  addr += 4;
+                }
+              else
+                {
+                  addr += 8;
+                }
+              addr += offset;
+              post_process_trampoline_desc desc;
+              if (offset_exists)
+                {
+                  // equals to adr.
+                  addr &= ~3UL;
+                  desc = { MOVADDR, offset_, addr, 8, s };
+                  desc.un.mov_addr.rn = rn;
+                }
+              else
+                {
+                  // real add rn, rx.
+                  if (is_thumb_)
+                    {
+                      // push rx; movt rx; movw rx;  add rn, rx;
+                      // pop rx;
+                      offset_add_end = 2 + 4 + 4 + 2 + 2;
+                    }
+                  else
+                    {
+                      // push rx; movt rx; movw rx;  add rn, rx;
+                      // pop rx;
+                      offset_add_end = 4 + 4 + 4 + 4 + 4;
+                    }
+                  desc = { ADDPC, offset_, addr, offset_add_end, s };
+                  desc.un.add_pc.rn = rn;
+                }
+              commit_desc (desc);
             }
           else
             {
-              // same.
-              offset_add_end = 4 + 4 + 4;
+              is_accept_ = false;
+              break;
             }
-          post_process_trampoline_desc desc
-              = { LDRPC, offset_, last_addr_, offset_add_end, s };
-          desc.un.ldr_pc.rn = rn;
-          commit_desc (desc);
         }
     }
   while (false);
@@ -864,10 +953,8 @@ handle_addpc_thumb (char *&start, char *&write, intptr_t addr, int rn)
   int rx = (rn + 1) % 8;
   _write[index++] = 0xb400 | (1 << rx);
   index += emit_movt_movw_thumb (addr, _write + index, rx, 0);
-  // ldr
-  _write[index++] = 0x6800 | (rx << 3) | rx;
   // add
-  _write[index++] = 0x1c00 | (rx << 3) | rn;
+  _write[index++] = 0x4400 | (rx << 3) | rn;
   // pop
   _write[index++] = 0xbc00 | (1 << rx);
   write += sizeof (uint16_t) * index;
@@ -881,6 +968,15 @@ handle_ldrpc_thumb (char *&start, char *&write, intptr_t addr, int rn)
   index += emit_movt_movw_thumb (addr, _write, rn, 0);
   _write[index++] = 0xf8d0 | rn;
   _write[index++] = rn << 12;
+  write += sizeof (uint16_t) * index;
+}
+
+static void
+handle_movaddr_thumb (char *&start, char *&write, intptr_t addr, int rn)
+{
+  uint16_t *_write = reinterpret_cast<uint16_t *> (write);
+  int index = 0;
+  index += emit_movt_movw_thumb (addr, _write, rn, 0);
   write += sizeof (uint16_t) * index;
 }
 
@@ -905,6 +1001,9 @@ handle_thumb_entry (post_process_trampoline_desc &desc, char *&start,
       break;
     case LDRPC:
       handle_ldrpc_thumb (start, write, desc.addr, desc.un.ldr_pc.rn);
+      break;
+    case MOVADDR:
+      handle_movaddr_thumb (start, write, desc.addr, desc.un.mov_addr.rn);
       break;
     default:
       assert (false);
@@ -954,8 +1053,6 @@ handle_addpc_arm (char *&start, char *&write, intptr_t addr, int rn)
   int rx = (rn + 1) % 8;
   _write[index++] = 0xe52d0004 | (rx << 12);
   index += emit_movt_movw_arm (addr, _write + index, rx);
-  // ldr
-  _write[index++] = 0xe5900000 | (rx << 12) | (rx << 16);
   // add rn, rx
   _write[index++] = 0xe0800000 | (rn << 12) | (rx << 16);
   // pop
@@ -976,6 +1073,15 @@ handle_ldrpc_arm (char *&start, char *&write, intptr_t addr, int rn)
 }
 
 static void
+handle_movaddr_arm (char *&start, char *&write, intptr_t addr, int rn)
+{
+  int index = 0;
+  uint32_t *_write = reinterpret_cast<uint32_t *> (write);
+  index += emit_movt_movw_arm (addr, _write, rn);
+  write += index * sizeof (uint32_t);
+}
+
+static void
 handle_arm_entry (post_process_trampoline_desc &desc, char *&start,
                   char *&write)
 {
@@ -992,6 +1098,9 @@ handle_arm_entry (post_process_trampoline_desc &desc, char *&start,
       break;
     case LDRPC:
       handle_ldrpc_arm (start, write, desc.addr, desc.un.ldr_pc.rn);
+      break;
+    case MOVADDR:
+      handle_movaddr_arm (start, write, desc.addr, desc.un.mov_addr.rn);
       break;
     default:
       assert (false);
