@@ -31,6 +31,7 @@ enum post_process_trampoline_type
   CB,
   B,
   ADDPC,
+  LDRPC,
 };
 
 struct post_process_trampoline_desc
@@ -38,6 +39,8 @@ struct post_process_trampoline_desc
   enum post_process_trampoline_type type;
   size_t offset;
   intptr_t addr;
+  int offset_add_end;
+  size_t instr_size;
   // type bl
   union
   {
@@ -59,6 +62,10 @@ struct post_process_trampoline_desc
     {
       int rn;
     } add_pc;
+    struct
+    {
+      int rn;
+    } ldr_pc;
   } un;
 };
 
@@ -79,7 +86,7 @@ private:
   void on_instr_1 (const char *, char *start, size_t s);
   virtual void on_addr (intptr_t);
   virtual int lowered_original_code_len (int);
-  void ensure_desc ();
+  void commit_desc (const post_process_trampoline_desc &desc);
   void advance (size_t);
   bool is_accept_;
   bool is_thumb_;
@@ -100,12 +107,14 @@ arm_dis_client::arm_dis_client (void *code_point)
 }
 
 void
-arm_dis_client::ensure_desc ()
+arm_dis_client::commit_desc (const post_process_trampoline_desc &desc)
 {
   if (desc_.get () == NULL)
     {
       desc_.reset (new desc_vector);
     }
+  desc_->push_back (desc);
+  lowered_original_code_len_ += desc.offset_add_end - desc.instr_size;
 }
 
 void
@@ -165,7 +174,7 @@ static std::unordered_map<std::string, int> g_condi_keywords
 static bool
 is_conditional_code (const char *str)
 {
-  if (g_condi_keywords.find (str) != g_condi_keywords.end ())
+  if (g_condi_keywords.find (std::string (str, 2)) != g_condi_keywords.end ())
     {
       return true;
     }
@@ -195,6 +204,7 @@ is_branch (const char *str)
 void
 arm_dis_client::on_instr_1 (const char *dis_str, char *start, size_t s)
 {
+  std::string orig (dis_str);
   bool check_pass = false;
   bool pc_showup = false;
   // check the instr.
@@ -318,12 +328,11 @@ arm_dis_client::on_instr_1 (const char *dis_str, char *start, size_t s)
               // bl unconditional
               // movt, movw, blx ip
               int offset_add_end = 4 + 4 + (is_thumb_ ? 2 : 4);
-              ensure_desc ();
               assert (last_addr_ != -1);
-              post_process_trampoline_desc desc = { BL, offset_, last_addr_ };
+              post_process_trampoline_desc desc
+                  = { BL, offset_, last_addr_, offset_add_end, s };
               desc.un.bl.is_blx = false;
-              desc_->push_back (desc);
-              lowered_original_code_len_ += offset_add_end - s;
+              commit_desc (desc);
             }
           else if (is_branch (dis_str))
             {
@@ -352,8 +361,8 @@ arm_dis_client::on_instr_1 (const char *dis_str, char *start, size_t s)
                   // or ldr address, address, nop,nop
                   offset_add_end = 4 + 4 + 4 + 4;
                 }
-              ensure_desc ();
-              post_process_trampoline_desc desc = { B, offset_, last_addr_ };
+              post_process_trampoline_desc desc
+                  = { B, offset_, last_addr_, offset_add_end, s };
               // always;
               int cond_code = 14;
               auto found = g_condi_keywords.find (dis_str + 1);
@@ -362,8 +371,7 @@ arm_dis_client::on_instr_1 (const char *dis_str, char *start, size_t s)
                   cond_code = found->second;
                 }
               desc.un.b.cond_code = cond_code;
-              desc_->push_back (desc);
-              lowered_original_code_len_ += offset_add_end - s;
+              commit_desc (desc);
             }
         }
       else if (instr_type == CB_TYPE)
@@ -386,19 +394,51 @@ arm_dis_client::on_instr_1 (const char *dis_str, char *start, size_t s)
             {
               is_not_zero = true;
             }
-          post_process_trampoline_desc desc = { CB, offset_, last_addr_ };
-          desc.un.cb.is_not_zero = is_not_zero;
-          desc.un.cb.rn = instr & ((1 << 3) - 1);
-          ensure_desc ();
-          desc_->push_back (desc);
           // cb{n}z, ldr.w pc, [pc, 0], nop, 4 byte address
           int offset_add_end = 2 + 4 + 2 + 4;
-          lowered_original_code_len_ += offset_add_end - s;
+          post_process_trampoline_desc desc
+              = { CB, offset_, last_addr_, offset_add_end, s };
+          desc.un.cb.is_not_zero = is_not_zero;
+          desc.un.cb.rn = instr & ((1 << 3) - 1);
+          commit_desc (desc);
         }
       else if (pc_showup)
         {
-          // FIXME: not able to handle pc show up
-          is_accept_ = false;
+          // FIXME: only handle ldr rx,[pc,x]
+          if (instr_type != LDR_TYPE || operand[0] != 'r'
+              || is_conditional_code (dis_str + 3))
+            {
+              is_accept_ = false;
+              break;
+            }
+          if (last_addr_ == -1)
+            {
+              LOGE ("arm_dis_client::on_instr_1: dis_str: %s\n",
+                    orig.c_str ());
+            }
+          assert (last_addr_ != -1);
+          int rn = operand[1] - '0';
+          if (rn > 9)
+            {
+              is_accept_ = false;
+              break;
+            }
+
+          int offset_add_end;
+          if (is_thumb_)
+            {
+              // movt, movw, ldr.w
+              offset_add_end = 4 + 4 + 4;
+            }
+          else
+            {
+              // same.
+              offset_add_end = 4 + 4 + 4;
+            }
+          post_process_trampoline_desc desc
+              = { LDRPC, offset_, last_addr_, offset_add_end, s };
+          desc.un.ldr_pc.rn = rn;
+          commit_desc (desc);
         }
     }
   while (false);
@@ -585,7 +625,8 @@ emit_address_thumb (uint16_t *write, intptr_t addr)
 }
 
 static int
-emit_movt_movw_thumb (intptr_t target, uint16_t *modify_intr_pointer, int rn)
+emit_movt_movw_thumb (intptr_t target, uint16_t *modify_intr_pointer, int rn,
+                      int code = 1)
 {
   uint16_t first, second, third, forth;
   uint16_t lower_imm16 = (target & 0xffff);
@@ -603,7 +644,7 @@ emit_movt_movw_thumb (intptr_t target, uint16_t *modify_intr_pointer, int rn)
     second = imm3 << 12;
     second |= rn << 8;
     second |= imm8;
-    second |= 1;
+    second |= (code & 1);
   }
   // third forth: movt
   {
@@ -737,7 +778,6 @@ static void
 handle_cb_thumb (char *&start, char *&write, intptr_t addr, bool is_not_zero,
                  int rn)
 {
-  start += 2;
   // cb{n}z, ldr.w pc, [pc, 0], nop, 4 byte address
   uint16_t cb = 0xb120;
   int _is_not_zero = !is_not_zero;
@@ -760,7 +800,6 @@ handle_cb_thumb (char *&start, char *&write, intptr_t addr, bool is_not_zero,
 static void
 handle_bl_thumb (char *&start, char *&write, intptr_t addr, bool is_blx)
 {
-  start += 4;
   if (!is_blx)
     {
       addr |= 1;
@@ -772,7 +811,6 @@ handle_bl_thumb (char *&start, char *&write, intptr_t addr, bool is_blx)
 static void
 handle_b_thumb (char *&start, char *&write, intptr_t addr, int cond_code)
 {
-  start += 2;
   int index = 0;
   uint16_t *_write = reinterpret_cast<uint16_t *> (write);
   if (cond_code == 14)
@@ -819,20 +857,30 @@ handle_b_thumb (char *&start, char *&write, intptr_t addr, int cond_code)
 static void
 handle_addpc_thumb (char *&start, char *&write, intptr_t addr, int rn)
 {
-  start += 2;
   // push rx; movt rx; movw rx; ldr rx, [rx]; add rn, rx;
   // pop rx;
   uint16_t *_write = reinterpret_cast<uint16_t *> (write);
   int index = 0;
   int rx = (rn + 1) % 8;
   _write[index++] = 0xb400 | (1 << rx);
-  index += emit_movt_movw_thumb (addr, _write + index, rx);
+  index += emit_movt_movw_thumb (addr, _write + index, rx, 0);
   // ldr
   _write[index++] = 0x6800 | (rx << 3) | rx;
   // add
   _write[index++] = 0x1c00 | (rx << 3) | rn;
   // pop
   _write[index++] = 0xbc00 | (1 << rx);
+  write += sizeof (uint16_t) * index;
+}
+
+static void
+handle_ldrpc_thumb (char *&start, char *&write, intptr_t addr, int rn)
+{
+  uint16_t *_write = reinterpret_cast<uint16_t *> (write);
+  int index = 0;
+  index += emit_movt_movw_thumb (addr, _write, rn, 0);
+  _write[index++] = 0xf8d0 | rn;
+  _write[index++] = rn << 12;
   write += sizeof (uint16_t) * index;
 }
 
@@ -855,15 +903,18 @@ handle_thumb_entry (post_process_trampoline_desc &desc, char *&start,
     case ADDPC:
       handle_addpc_thumb (start, write, desc.addr, desc.un.add_pc.rn);
       break;
+    case LDRPC:
+      handle_ldrpc_thumb (start, write, desc.addr, desc.un.ldr_pc.rn);
+      break;
     default:
       assert (false);
     }
+  start += desc.instr_size;
 }
 
 static void
 handle_bl_arm (char *&start, char *&write, intptr_t addr, bool is_blx)
 {
-  start += 4;
   emit_movt_movw_branch_arm (addr, reinterpret_cast<uint32_t *> (write), 1);
   write += arm_movt_movw_bytes;
 }
@@ -871,7 +922,6 @@ handle_bl_arm (char *&start, char *&write, intptr_t addr, bool is_blx)
 static void
 handle_b_arm (char *&start, char *&write, intptr_t addr, int cond_code)
 {
-  start += 4;
   int index = 0;
   uint32_t *_write = reinterpret_cast<uint32_t *> (write);
   if (cond_code == 14)
@@ -899,7 +949,6 @@ handle_addpc_arm (char *&start, char *&write, intptr_t addr, int rn)
 {
   // push rx; movt rx; movw rx; ldr rx, [rx]; add rn, rx;
   // pop rx;
-  start += 4;
   int index = 0;
   uint32_t *_write = reinterpret_cast<uint32_t *> (write);
   int rx = (rn + 1) % 8;
@@ -911,6 +960,18 @@ handle_addpc_arm (char *&start, char *&write, intptr_t addr, int rn)
   _write[index++] = 0xe0800000 | (rn << 12) | (rx << 16);
   // pop
   _write[index++] = 0xe49d0004 | (rn << 12);
+  write += index * sizeof (uint32_t);
+}
+
+static void
+handle_ldrpc_arm (char *&start, char *&write, intptr_t addr, int rn)
+{
+  // push rx; movt rx; movw rx; ldr rx, [rx]; add rn, rx;
+  // pop rx;
+  int index = 0;
+  uint32_t *_write = reinterpret_cast<uint32_t *> (write);
+  index += emit_movt_movw_arm (addr, _write, rn);
+  _write[index++] = 0xe5900000 | (rn << 12) | (rn << 16);
   write += index * sizeof (uint32_t);
 }
 
@@ -929,9 +990,13 @@ handle_arm_entry (post_process_trampoline_desc &desc, char *&start,
     case ADDPC:
       handle_addpc_arm (start, write, desc.addr, desc.un.add_pc.rn);
       break;
+    case LDRPC:
+      handle_ldrpc_arm (start, write, desc.addr, desc.un.ldr_pc.rn);
+      break;
     default:
       assert (false);
     }
+  start += desc.instr_size;
 }
 
 void

@@ -11,12 +11,14 @@
 void
 logi (const char *fmt, ...)
 {
-  char buf[512];
   va_list va;
   va_start (va, fmt);
-  int bytes = vsnprintf (buf, 511, fmt, va);
+  int bytes = vsnprintf (NULL, 0, fmt, va);
   va_end (va);
-  buf[bytes] = '\0';
+  char buf[bytes + 1];
+  va_start (va, fmt);
+  vsnprintf (buf, bytes + 1, fmt, va);
+  va_end (va);
 #ifndef __ANDROID__
   fputs (buf, stdout);
 #else
@@ -27,12 +29,14 @@ logi (const char *fmt, ...)
 void
 loge (const char *fmt, ...)
 {
-  char buf[512];
   va_list va;
   va_start (va, fmt);
-  int bytes = vsnprintf (buf, 511, fmt, va);
+  int bytes = vsnprintf (NULL, 0, fmt, va);
   va_end (va);
-  buf[bytes] = '\0';
+  char buf[bytes + 1];
+  va_start (va, fmt);
+  vsnprintf (buf, bytes + 1, fmt, va);
+  va_end (va);
 #ifndef __ANDROID__
   fputs (buf, stdout);
 #else
