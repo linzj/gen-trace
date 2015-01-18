@@ -2,6 +2,7 @@
 #include <vector>
 #include <stdlib.h>
 #include <stdio.h>
+#include <string.h>
 #include <assert.h>
 #include "code_modify.h"
 #include "code_manager_impl.h"
@@ -9,7 +10,14 @@
 #include "log.h"
 #include <time.h>
 #include <stdint.h>
+#include <unistd.h>
+#include <errno.h>
 #include <inttypes.h>
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <sys/wait.h>
+#include <poll.h>
+
 #define USE_PERF 1
 
 typedef std::vector<mem_modify_instr *> instr_vector;
@@ -136,22 +144,24 @@ free_check_results (check_result_vector &check_results)
   check_results.resize (0);
 }
 
-int
-code_modify (const code_modify_desc *code_points, int count_of,
-             pfn_called_callback called_callback,
-             pfn_ret_callback return_callback)
+static bool
+do_fork (const code_modify_desc *code_points, int count,
+         pfn_called_callback called_callback, pfn_ret_callback return_callback,
+         int fd)
 {
-  assert (g_client);
-  assert (g_code_manager);
-  instr_vector v;
-  check_result_vector check_results;
-  FILE *fp_for_fail = nullptr;
-
-  if (g_log_for_fail)
+  pid_t fork_ret = fork ();
+  if (fork_ret == -1)
     {
-      fp_for_fail = fopen (g_log_for_fail, "w");
+      LOGE ("do_fork: fork fails:%s\n", strerror (errno));
+      return false;
     }
-  for (int i = 0; i < count_of; ++i)
+  if (fork_ret > 0)
+    {
+      return true;
+    }
+  // child
+  check_result_vector check_results;
+  for (int i = 0; i < count; ++i)
     {
       void *code_point = code_points[i].code_point;
       const char *name = code_points[i].name;
@@ -166,9 +176,139 @@ code_modify (const code_modify_desc *code_points, int count_of,
           check_results.push_back (b);
         }
     }
+  // send back to the parent.
+  for (auto r : check_results)
+    {
+      size_t size = r->size + sizeof (check_code_result_buffer);
+      assert (size <= 1024);
+      ssize_t bytes = write (fd, r, size);
+      if (bytes == -1)
+        {
+          LOGE ("do_fork: child write fails %s.\n", strerror (errno));
+        }
+    }
+  check_code_result_buffer exit_buffer
+      = { nullptr, nullptr, target_client::check_code_child_exit,
+          static_cast<size_t> (getpid ()) };
+  ssize_t bytes = write (fd, &exit_buffer, sizeof (check_code_result_buffer));
+  if (bytes == -1)
+    {
+      LOGE ("do_fork: child write fails %s.\n", strerror (errno));
+    }
+  _exit (0);
+}
+
+static bool
+do_parent (check_result_vector &check_results, int fd, int child_count)
+{
+  pollfd pfd = { fd, POLLIN };
+  {
+    std::vector<char> buf;
+    buf.reserve (1024);
+    while (child_count)
+      {
+        pfd.revents = 0;
+        int poll_ret = poll (&pfd, 1, -1);
+        if (poll_ret == -1)
+          {
+            LOGE ("code_modify: fails to poll %s\n", strerror (errno));
+            return 0;
+          }
+        if (pfd.revents & POLLIN)
+          {
+            char *b = const_cast<char *> (buf.data ());
+            ssize_t bytes = read (fd, b, buf.capacity ());
+            if (bytes == -1)
+              {
+                LOGE ("code_modify: read from parent socket fails:%s\n",
+                      strerror (errno));
+                return false;
+              }
+            if (bytes == 0)
+              continue;
+            check_code_result_buffer *b_1
+                = reinterpret_cast<check_code_result_buffer *> (b);
+            if (b_1->status == target_client::check_code_child_exit)
+              {
+                pid_t wait_ret = waitpid (b_1->size, nullptr, 0);
+                if (wait_ret == -1)
+                  {
+                    LOGE ("code_modify: wait fails:%s, byte read %ld, sizeof "
+                          "(ssize_t)\n",
+                          strerror (errno), bytes, sizeof (ssize_t));
+                    return false;
+                  }
+                b_1->size = 0;
+                child_count--;
+              }
+            else
+              {
+                int size = b_1->size + sizeof (check_code_result_buffer);
+                assert (bytes == size);
+                check_code_result_buffer *b_2
+                    = static_cast<check_code_result_buffer *> (malloc (size));
+                assert (b_2 != nullptr);
+                memcpy (b_2, b_1, size);
+                check_results.push_back (b_2);
+              }
+          }
+      }
+  }
+  // close parent socket
+  close (fd);
+  return true;
+}
+
+int
+code_modify (const code_modify_desc *code_points, int count_of,
+             pfn_called_callback called_callback,
+             pfn_ret_callback return_callback)
+{
+  assert (g_client);
+  assert (g_code_manager);
+  instr_vector v;
+  check_result_vector check_results;
+  FILE *fp_for_fail = nullptr;
+
+  int cpu_count = sysconf (_SC_NPROCESSORS_CONF);
+  if (cpu_count == -1)
+    {
+      LOGE ("code_modify: get cpu_count fails, assuming 1. %s\n",
+            strerror (errno));
+      cpu_count = 1;
+    }
+  int per_thread_process_count = count_of / cpu_count;
+  int start = 0;
+  int sockets[2];
+  if (-1 == socketpair (AF_UNIX, SOCK_SEQPACKET, 0, sockets))
+    {
+      LOGE ("code_modify:create socket fails: %s\n", strerror (errno));
+      return 0;
+    }
+  for (int i = 0; i < (cpu_count - 1); ++i, start += per_thread_process_count)
+    {
+      if (!do_fork (code_points + start, per_thread_process_count,
+                    called_callback, return_callback, sockets[1]))
+        {
+          return 0;
+        }
+    }
+  do_fork (code_points + start, count_of - start, called_callback,
+           return_callback, sockets[1]);
+  // close child end socket.
+  close (sockets[1]);
+  if (!do_parent (check_results, sockets[0], cpu_count))
+    {
+      return 0;
+    }
+
   std::unique_ptr<target_session> session
       = std::move (g_client->create_session ());
 
+  if (g_log_for_fail)
+    {
+      fp_for_fail = fopen (g_log_for_fail, "w");
+    }
   for (auto result : check_results)
     {
       void *code_point = result->code_point;
