@@ -100,7 +100,7 @@ private:
   bool is_thumb_;
   size_t offset_;
   size_t lowered_original_code_len_;
-  bool ip_appears_;
+  bool ip_appeared_;
   intptr_t last_addr_;
   std::unique_ptr<desc_vector> desc_;
   friend class arm_target_client;
@@ -109,7 +109,7 @@ private:
 arm_dis_client::arm_dis_client (void *code_point)
     : is_accept_ (true),
       is_thumb_ ((reinterpret_cast<intptr_t> (code_point) & 1) != 0),
-      offset_ (0), lowered_original_code_len_ (0), ip_appears_ (false),
+      offset_ (0), lowered_original_code_len_ (0), ip_appeared_ (false),
       last_addr_ (-1)
 {
 }
@@ -259,6 +259,10 @@ arm_dis_client::on_instr_1 (const char *dis_str, char *start, size_t s)
     CB_TYPE,
     ASL_TYPE,
     TST_TYPE,
+    MVN_TYPE,
+    VPUSH_TYPE,
+    VLD_TYPE,
+    VMOV_TYPE,
   };
   struct
   {
@@ -287,7 +291,11 @@ arm_dis_client::on_instr_1 (const char *dis_str, char *start, size_t s)
                      { "cb", 2, CB_TYPE },
                      { "asl", 3, ASL_TYPE },
                      { "tst", 3, TST_TYPE },
-                     { "b", 1, B_TYPE } };
+                     { "mvn", 3, MVN_TYPE },
+                     { "b", 1, B_TYPE },
+                     { "vpush", 5, VPUSH_TYPE },
+                     { "vld", 3, VLD_TYPE },
+                     { "vmov", 4, VMOV_TYPE } };
   enum instr_type instr_type;
   for (size_t i = 0; i < sizeof (check_list) / sizeof (check_list[0]); ++i)
     {
@@ -308,9 +316,16 @@ arm_dis_client::on_instr_1 (const char *dis_str, char *start, size_t s)
     {
       *operand = '\0';
       operand += 1;
+      {
+        char *comment;
+        if ((comment = strchr (operand, ';')))
+          {
+            comment[0] = '\0';
+          }
+      }
       if (strstr (operand, "ip"))
         {
-          ip_appears_ = true;
+          ip_appeared_ = true;
         }
       // check if pc position independent code is here.
       // currently these code is not supported
@@ -325,8 +340,17 @@ arm_dis_client::on_instr_1 (const char *dis_str, char *start, size_t s)
       // hack on bl inst
       if (instr_type == B_TYPE)
         {
+          // remove .n, .w suffix
+          char *dot_n;
+          if ((dot_n = strrchr (dis_str, '.')))
+            {
+              if (dot_n[1] == 'n' || dot_n[1] == 'w')
+                {
+                  dot_n[0] = '\0';
+                }
+            }
           // conditional is harder, not handle now.
-          if (ip_appears_ || dis_str[2] != '\0')
+          if (ip_appeared_)
             {
               is_accept_ = false;
               break;
@@ -338,17 +362,10 @@ arm_dis_client::on_instr_1 (const char *dis_str, char *start, size_t s)
               break;
             }
 
-          // remove .n suffix
-          char *dot_n;
-          if ((dot_n = strrchr (dis_str, '.')))
-            {
-              if (dot_n[1] == 'n')
-                {
-                  dot_n[0] = '\0';
-                }
-            }
-
-          if (dis_str[1] == 'l' && dis_str[2] == '\0')
+          // bl and blx unconditional.
+          if (dis_str[1] == 'l'
+              && (dis_str[2] == '\0'
+                  || (dis_str[2] == 'x' && dis_str[3] == '\0')))
             {
               // bl unconditional
               // movt, movw, blx ip
@@ -356,7 +373,7 @@ arm_dis_client::on_instr_1 (const char *dis_str, char *start, size_t s)
               assert (last_addr_ != -1);
               post_process_trampoline_desc desc
                   = { BL, offset_, last_addr_, offset_add_end, s };
-              desc.un.bl.is_blx = false;
+              desc.un.bl.is_blx = dis_str[2] == 'x';
               commit_desc (desc);
             }
           else if (is_branch (dis_str))
@@ -397,6 +414,11 @@ arm_dis_client::on_instr_1 (const char *dis_str, char *start, size_t s)
                 }
               desc.un.b.cond_code = cond_code;
               commit_desc (desc);
+            }
+          else
+            {
+              is_accept_ = false;
+              break;
             }
         }
       else if (instr_type == CB_TYPE)
@@ -778,11 +800,11 @@ emit_movt_movw_thumb (intptr_t target, uint16_t *modify_intr_pointer, int rn,
 
 static void
 emit_movt_movw_branch_thumb (intptr_t target, uint16_t *modify_intr_pointer,
-                             int bl)
+                             int bl, int code = 1)
 {
   const uint16_t ip = 12;
   uint16_t fifth;
-  emit_movt_movw_thumb (target, modify_intr_pointer, ip);
+  emit_movt_movw_thumb (target, modify_intr_pointer, ip, code);
   {
     fifth = 0x8e << 7;
     fifth |= ip << 3;
@@ -863,7 +885,7 @@ arm_target_client::modify_code (target_session *session)
       intptr_t target_code_point_2 = target_code_point & ~1UL;
       if (target_code_point_2 & 3UL)
         {
-          emit_movt_movw_branch_thumb (trampoline_code_start,
+          emit_movt_movw_branch_thumb (trampoline_code_start | 1,
                                        modify_intr_pointer, 0);
         }
       else
@@ -910,11 +932,8 @@ handle_cb_thumb (char *&start, char *&write, intptr_t addr, bool is_not_zero,
 static void
 handle_bl_thumb (char *&start, char *&write, intptr_t addr, bool is_blx)
 {
-  if (!is_blx)
-    {
-      addr |= 1;
-    }
-  emit_movt_movw_branch_thumb (addr, reinterpret_cast<uint16_t *> (write), 1);
+  emit_movt_movw_branch_thumb (addr, reinterpret_cast<uint16_t *> (write), 1,
+                               !is_blx);
   write += thumb_movt_movw_bytes;
 }
 
@@ -947,6 +966,7 @@ handle_b_thumb (char *&start, char *&write, intptr_t addr, int cond_code)
       int lazy_index = index++;
       uint16_t bninstr;
       index += emit_ldr_w (_write + index, emitted_nop);
+      index += emit_address_thumb (_write + index, addr);
       if (emitted_nop)
         {
           bninstr = 0xe004;
@@ -1035,6 +1055,10 @@ handle_thumb_entry (post_process_trampoline_desc &desc, char *&start,
 static void
 handle_bl_arm (char *&start, char *&write, intptr_t addr, bool is_blx)
 {
+  if (is_blx)
+    {
+      addr |= 1;
+    }
   emit_movt_movw_branch_arm (addr, reinterpret_cast<uint32_t *> (write), 1);
   write += arm_movt_movw_bytes;
 }
