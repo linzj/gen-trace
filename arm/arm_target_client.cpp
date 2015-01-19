@@ -756,8 +756,7 @@ emit_address_thumb (uint16_t *write, intptr_t addr)
 }
 
 static int
-emit_movt_movw_thumb (intptr_t target, uint16_t *modify_intr_pointer, int rn,
-                      int code = 1)
+emit_movt_movw_thumb (intptr_t target, uint16_t *modify_intr_pointer, int rn)
 {
   uint16_t first, second, third, forth;
   uint16_t lower_imm16 = (target & 0xffff);
@@ -775,7 +774,6 @@ emit_movt_movw_thumb (intptr_t target, uint16_t *modify_intr_pointer, int rn,
     second = imm3 << 12;
     second |= rn << 8;
     second |= imm8;
-    second |= (code & 1);
   }
   // third forth: movt
   {
@@ -800,11 +798,11 @@ emit_movt_movw_thumb (intptr_t target, uint16_t *modify_intr_pointer, int rn,
 
 static void
 emit_movt_movw_branch_thumb (intptr_t target, uint16_t *modify_intr_pointer,
-                             int bl, int code = 1)
+                             int bl)
 {
   const uint16_t ip = 12;
   uint16_t fifth;
-  emit_movt_movw_thumb (target, modify_intr_pointer, ip, code);
+  emit_movt_movw_thumb (target, modify_intr_pointer, ip);
   {
     fifth = 0x8e << 7;
     fifth |= ip << 3;
@@ -932,8 +930,11 @@ handle_cb_thumb (char *&start, char *&write, intptr_t addr, bool is_not_zero,
 static void
 handle_bl_thumb (char *&start, char *&write, intptr_t addr, bool is_blx)
 {
-  emit_movt_movw_branch_thumb (addr, reinterpret_cast<uint16_t *> (write), 1,
-                               !is_blx);
+  if (!is_blx)
+    {
+      addr |= 1;
+    }
+  emit_movt_movw_branch_thumb (addr, reinterpret_cast<uint16_t *> (write), 1);
   write += thumb_movt_movw_bytes;
 }
 
@@ -993,7 +994,7 @@ handle_addpc_thumb (char *&start, char *&write, intptr_t addr, int rn)
   int index = 0;
   int rx = (rn + 1) % 8;
   _write[index++] = 0xb400 | (1 << rx);
-  index += emit_movt_movw_thumb (addr, _write + index, rx, 0);
+  index += emit_movt_movw_thumb (addr, _write + index, rx);
   // add
   _write[index++] = 0x4400 | (rx << 3) | rn;
   // pop
@@ -1006,7 +1007,7 @@ handle_ldrpc_thumb (char *&start, char *&write, intptr_t addr, int rn)
 {
   uint16_t *_write = reinterpret_cast<uint16_t *> (write);
   int index = 0;
-  index += emit_movt_movw_thumb (addr, _write, rn, 0);
+  index += emit_movt_movw_thumb (addr, _write, rn);
   _write[index++] = 0xf8d0 | rn;
   _write[index++] = rn << 12;
   write += sizeof (uint16_t) * index;
@@ -1017,7 +1018,7 @@ handle_movaddr_thumb (char *&start, char *&write, intptr_t addr, int rn)
 {
   uint16_t *_write = reinterpret_cast<uint16_t *> (write);
   int index = 0;
-  index += emit_movt_movw_thumb (addr, _write, rn, 0);
+  index += emit_movt_movw_thumb (addr, _write, rn);
   write += sizeof (uint16_t) * index;
 }
 
