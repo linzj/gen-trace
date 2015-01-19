@@ -355,8 +355,8 @@ arm_dis_client::on_instr_1 (const char *dis_str, char *start, size_t s)
               is_accept_ = false;
               break;
             }
-          // if this is a bl rx case.
-          if (strchr (operand, 'r'))
+          // if this is a bl rx or bx case.
+          if (strchr (operand, 'r') || dis_str[1] == 'x')
             {
               // just copy not need to handle
               break;
