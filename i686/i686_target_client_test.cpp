@@ -1,4 +1,4 @@
-#include "x64_target_client.h"
+#include "i686_target_client.h"
 #include "code_manager_impl.h"
 #include <assert.h>
 #include <stdlib.h>
@@ -25,8 +25,8 @@ int
 main ()
 {
   code_manager_impl code_manager;
-  x64_target_client x64_target_client;
-  target_client *target_client = &x64_target_client;
+  i686_target_client i686_target_client;
+  target_client *target_client = &i686_target_client;
   std::unique_ptr<target_session> session
       = std::move (target_client->create_session ());
   check_code_result_buffer *b

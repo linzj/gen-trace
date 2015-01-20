@@ -38,6 +38,12 @@ private:
   }
   int now_;
 };
+#elif defined(__i386__)
+static const char *test_lines[] = {
+  "here\n", "0\n", "module start\n", "libbase_controller_test_lib.so\n",
+  "635\n", "321\n", "original_function\n", "module end\n",
+};
+
 #endif
 
 class test_fp_line_client : public fp_line_client

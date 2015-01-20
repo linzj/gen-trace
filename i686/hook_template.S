@@ -3,13 +3,13 @@
 .hidden template_for_hook
 .type template_for_hook, @function
 .Lname:
-  .zero 8
+  .zero 4
 .Lhook_function:
-  .zero 8
+  .zero 4
 .Ljump_back:
-  .zero 8
+  .zero 4
 .Lret_jump:
-  .zero 8
+  .zero 4
 template_for_hook:
   # return point -4
   pushl (%esp) # -8
@@ -24,16 +24,17 @@ template_for_hook:
 .Lpop_eax:
   popl %eax
   movl %eax, %ebx
-  addl .Lret_point - .Lpop_eax, %eax
+  leal (.Lret_point - .Lpop_eax)(%eax), %eax
   movl %eax, 28(%esp)
   # build the function argument.
   movl 24(%esp), %eax #the caller.
-  movl %eax, -12(%esp)
+  movl %eax, -16(%esp)
   movl %ebx, %eax
-  addl .Lname - .Lpop_eax, %eax
-  movl %eax, -16(%esp) #the name of function, make char *.
+  leal (.Lname - .Lpop_eax)(%eax), %eax
+  movl (%eax), %eax
+  movl %eax, -12(%esp) #the name of function, make char *.
   subl $16, %esp
-  addl .Lhook_function - .Lpop_eax, %ebx
+  leal (.Lhook_function - .Lpop_eax)(%ebx), %ebx
   call *(%ebx) # gogogogo
   add $16, %esp
   popl %ebx
@@ -53,10 +54,10 @@ template_for_hook:
 .Lpop_eax2:
   popl %eax
   movl %eax, %edx
-  addl .Lname - .Lpop_eax2, %eax
+  leal (.Lname - .Lpop_eax2)(%eax), %eax
   movl %eax, -16(%esp)
   movl %edx, %eax
-  addl .Lret_jump - .Lpop_eax2, %eax
+  leal (.Lret_jump - .Lpop_eax2)(%eax), %eax
   subl $16, %esp
   call *(%eax)
   add $16, %esp
@@ -66,7 +67,6 @@ template_for_hook:
   popl %edx
   popl %eax
   jmpl *-20(%esp)
-
 .globl template_for_hook_end
 .hidden template_for_hook_end
 .type template_for_hook_end, @function

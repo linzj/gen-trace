@@ -47,10 +47,23 @@ original_function (int a, int b, int c, int d, int e, int f, int g)
 static void
 add_jump_to_original (char *code_start, int offset)
 {
-  offset -= 6;
-  code_start[0] = 0xff;
-  code_start[1] = 0x25;
-  memcpy (code_start + 2, &offset, 4);
+  offset -= 5;
+  //   3:	e8 00 00 00 00       	call   8 <foo()+0x8>
+  //   8:	50                   	push   %eax
+  //   9:	b8 12 ef cd ab       	mov    $0xabcdef12,%eax
+  //   e:	01 44 24 04          	add    %eax,0x4(%esp)
+  //  12:	8b 44 24 04          	mov    0x4(%esp),%eax
+  //  16:	8b 00                	mov    (%eax),%eax
+  //  18:	89 44 24 04          	mov    %eax,0x4(%esp)
+  //  1c:	58                   	pop    %eax
+  //  1d:	83 c4 04             	add    $0x4,%esp
+  //  20:	ff 64 24 fc          	jmp    *-0x4(%esp)
+  //  24:	5d                   	pop    %eb
+  const char *instr = "\xe8\x00\x00\x00\x00\x50\xb8\x00\x00\x00\x00\x01\x44"
+                      "\x24\x04\x8b\x44\x24\x04\x8b\x00\x89\x44\x24\x04\x58"
+                      "\x83\xc4\x04\xff\x64\x24\xfc";
+  memcpy (code_start, instr, 0x24 - 0x3);
+  memcpy (code_start + 9 + 1 - 3, &offset, 4);
 }
 
 int

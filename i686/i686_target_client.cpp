@@ -14,12 +14,6 @@ const static int max_positive_jump = 0x7fffffff;
 const static int max_negative_jump = 0x80000000;
 const static int nop = 0x90;
 const static int byte_needed_to_modify_const = 5;
-// 0000000000000000 <foo()>:
-//    0:	55                   	push   %rbp
-//    1:	48 89 e5             	mov    %rsp,%rbp
-//    4:	e9 00 00 00 00       	jmpq   9 <foo()+0x9>
-//    9:	5d                   	pop    %rbp
-//    a:	c3                   	retq
 
 i686_target_client::i686_target_client () {}
 i686_target_client::~i686_target_client () {}
@@ -213,7 +207,7 @@ char *i686_target_client::template_end (intptr_t)
 
 bool
 i686_target_client::check_jump_dist (intptr_t target_code_point,
-                                    intptr_t trampoline_code_start)
+                                     intptr_t trampoline_code_start)
 {
   intptr_t jump_dist = trampoline_code_start
                        - (target_code_point + byte_needed_to_modify_const);
@@ -232,7 +226,7 @@ i686_target_client::flush_code (void *, int)
 
 void
 i686_target_client::copy_original_code (void *trampoline_code_start,
-                                       check_code_result_buffer *b)
+                                        check_code_result_buffer *b)
 {
   void *target_code_point = b->code_point;
   int len = b->code_len_to_replace;
@@ -241,16 +235,29 @@ i686_target_client::copy_original_code (void *trampoline_code_start,
 
 void
 i686_target_client::add_jump_to_original (char *code_start, int offset,
-                                         code_context *code_context)
+                                          code_context *code_context)
 {
-  offset -= 6;
-  code_start[0] = 0xff;
-  code_start[1] = 0x25;
-  memcpy (code_start + 2, &offset, 4);
+  offset -= 5;
+  //   3:	e8 00 00 00 00       	call   8 <foo()+0x8>
+  //   8:	50                   	push   %eax
+  //   9:	b8 12 ef cd ab       	mov    $0xabcdef12,%eax
+  //   e:	01 44 24 04          	add    %eax,0x4(%esp)
+  //  12:	8b 44 24 04          	mov    0x4(%esp),%eax
+  //  16:	8b 00                	mov    (%eax),%eax
+  //  18:	89 44 24 04          	mov    %eax,0x4(%esp)
+  //  1c:	58                   	pop    %eax
+  //  1d:	83 c4 04             	add    $0x4,%esp
+  //  20:	ff 64 24 fc          	jmp    *-0x4(%esp)
+  //  24:	5d                   	pop    %eb
+  const char *instr = "\xe8\x00\x00\x00\x00\x50\xb8\x00\x00\x00\x00\x01\x44"
+                      "\x24\x04\x8b\x44\x24\x04\x8b\x00\x89\x44\x24\x04\x58"
+                      "\x83\xc4\x04\xff\x64\x24\xfc";
+  memcpy (code_start, instr, 0x24 - 0x3);
+  memcpy (code_start + 9 + 1 - 3, &offset, 4);
 }
 
 int
 i686_target_client::jump_back_instr_len (code_context *)
 {
-  return 6;
+  return 0x24 - 0x3;
 }

@@ -2,7 +2,7 @@
 #define X64_TARGET_CLIENT_H
 #include "base_target_client.h"
 
-class i686_target_client: public base_target_client
+class i686_target_client : public base_target_client
 {
 public:
   i686_target_client ();
