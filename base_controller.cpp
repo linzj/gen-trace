@@ -17,6 +17,8 @@
 #include "x64/x64_target_client.h"
 #elif defined(__arm__)
 #include "arm/arm_target_client.h"
+#elif defined(__i386__)
+#include "i686/i686_target_client.h"
 #else
 #error not supported machine
 #endif
@@ -185,6 +187,8 @@ base_controller::do_modify (config_desc *config_desc)
   target_client *_target_client = new x64_target_client;
 #elif defined(__arm__)
   target_client *_target_client = new arm_target_client;
+#elif defined(__i386__)
+  target_client *_target_client = new i686_target_client;
 #endif
   LOGI ("base_controller::do_modify begin\n");
   code_modify_init (_target_client);
