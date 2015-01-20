@@ -55,6 +55,7 @@ template_for_hook:
   popl %eax
   movl %eax, %edx
   leal (.Lname - .Lpop_eax2)(%eax), %eax
+  movl (%eax), %eax
   movl %eax, -16(%esp)
   movl %edx, %eax
   leal (.Lret_jump - .Lpop_eax2)(%eax), %eax

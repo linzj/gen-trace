@@ -221,7 +221,7 @@ i686_target_client::check_jump_dist (intptr_t target_code_point,
 void
 i686_target_client::flush_code (void *, int)
 {
-  // x64 does not need this.
+  // i686 does not need this.
 }
 
 void
