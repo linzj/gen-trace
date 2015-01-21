@@ -1,0 +1,113 @@
+.PHONY: all test
+NDK_PATH_SYSROOT := $(NDK_PATH)/platforms/android-14/arch-x86
+GNU_STL_PATH := -L$(NDK_PATH)/sources/cxx-stl/gnu-libstdc++/libs/x86/ -L$(NDK_PATH)/sources/cxx-stl/gnu-libstdc++/$(GCC_VER)/libs/x86
+GNU_STL_INCLUDE := -I$(NDK_PATH)/sources/cxx-stl/gnu-libstdc++/$(GCC_VER)/include/  -I$(NDK_PATH)/sources/cxx-stl/gnu-libstdc++/$(GCC_VER)/libs/x86/include/
+GNU_STL := -lgnustl_static
+all: libtrace.so
+TESTS := mem_modify_test \
+code_manager_impl_test \
+code_modify_test \
+config_reader_test \
+hook_template_test \
+dis_i686_test \
+i686_target_client_test \
+base_controller_test
+
+test: $(TESTS)
+MAIN_OBJS := log.o \
+		mem_modify.o \
+		code_manager_impl.o \
+		code_modify.o \
+		config_reader.o \
+		base_controller.o \
+		runtime_stack.o \
+		entry.o \
+		base_target_client.o \
+		dis_client.o \
+		disassembler.o
+
+MAIN_TEST_OBJS :=  \
+				  mem_modify_test.o \
+				  code_modify_test.o \
+				  code_manager_impl_test.o \
+				  config_reader_test.o \
+				  base_controller_test.o \
+				  base_controller_test_lib.o \
+
+ARM_MAIN_OBJS := \
+				 i686/hook_template.o \
+				 i686/dis_gnu.o \
+				 i686/dis.o \
+				 i686/i686_target_client.o
+
+ARM_TEST_OBJS := \
+				 i686/hook_template_test.o \
+				 i686/dis_test.o \
+				 i686/i686_target_client_test.o
+
+
+OBJS := $(MAIN_OBJS) \
+		\
+		$(MAIN_TEST_OBJS) \
+		\
+		$(ARM_MAIN_OBJS) \
+		\
+		$(ARM_TEST_OBJS)
+
+CFLAGS := -O2 -g3 -gdwarf-4 -Wall -I. -fPIC -fvisibility=hidden --sysroot=$(NDK_PATH_SYSROOT) $(GNU_STL_INCLUDE) \
+			-std=c++11
+
+LDFLAGS := -pie --sysroot=$(NDK_PATH_SYSROOT)
+LDLIBS := -lc -lm $(GNU_STL_PATH) $(GNU_STL) -llog
+CC=i686-linux-android-gcc
+CXX=i686-linux-android-gcc
+
+-include $(OBJS:.o=.d)
+
+%.o: %.c
+	$(CC) $(CFLAGS) -c $*.c -o $*.o
+	$(CC) -MM -MT $*.o $(CFLAGS) $*.c > $*.d
+
+%.o: %.cpp
+	$(CXX) $(CFLAGS) -c $*.cpp -o $*.o
+	$(CXX) -MM -MT $*.o $(CFLAGS) $*.cpp > $*.d
+
+%.o: %.S
+	$(CXX) $(CFLAGS) -c $*.S -o $*.o
+	$(CXX) -MM -MT $*.o $(CFLAGS) $*.S > $*.d
+
+
+mem_modify_test: mem_modify_test.o log.o mem_modify.o
+	$(CXX) $(LDFLAGS) -o $@ $^ $(LDLIBS)
+
+code_manager_impl_test: code_manager_impl.o log.o code_manager_impl_test.o
+	$(CXX) $(LDFLAGS) -o $@ $^ $(LDLIBS)
+
+code_modify_test: code_modify_test.o log.o code_manager_impl.o code_modify.o mem_modify.o
+	$(CXX) $(LDFLAGS) -o $@ $^ $(LDLIBS)
+
+config_reader_test: config_reader.o config_reader_test.o log.o
+	$(CXX) $(LDFLAGS) -o $@ $^ $(LDLIBS)
+
+dis_i686_test: i686/dis.o i686/dis_test.o i686/dis_gnu.o log.o disassembler.o dis_client.o
+	$(CXX) $(LDFLAGS) -o $@ $^ $(LDLIBS)
+
+hook_template_test: i686/hook_template_test.o i686/hook_template.o log.o
+	$(CXX) $(LDFLAGS) -o $@ $^ $(LDLIBS)
+
+i686_target_client_test: i686/hook_template_i686.o i686/hook_template.o i686/dis.o i686/dis_gnu.o i686/i686_target_client.o i686/i686_target_client_test.o code_manager_impl.o log.o code_modify.o mem_modify.o disassembler.o dis_client.o base_target_client.o
+	$(CXX) $(LDFLAGS) -o $@ $^ $(LDLIBS)
+
+libbase_controller_test_lib.so: base_controller_test_lib.o log.o
+	$(CXX) $(LDFLAGS) -shared -o $@ $^ $(LDLIBS)
+
+base_controller_test: config_reader.o  base_controller.o code_manager_impl.o log.o code_modify.o mem_modify.o i686/hook_template_i686.o i686/hook_template.o  i686/dis.o i686/dis_gnu.o i686/i686_target_client.o base_controller_test.o libbase_controller_test_lib.so disassembler.o dis_client.o base_target_client.o
+	$(CXX) $(LDFLAGS) -o $@ $(filter %.o, $^) $(LDLIBS)
+
+clean:
+	rm *.o *.d **/*.o **/*.d
+test_all: $(TESTS)
+	$(foreach test, $^, $(info ./$(test)))
+
+libtrace.so: $(MAIN_OBJS) $(ARM_MAIN_OBJS)
+	$(CXX) $(LDFLAGS) -Wl,--no-undefined -shared -o $@ $^ $(LDLIBS)

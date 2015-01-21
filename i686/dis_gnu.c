@@ -3,9 +3,31 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdint.h>
+#include <stdint.h>
+#include <setjmp.h>
 #include <sys/stat.h>
 
 #include "dis_gnu.h"
+
+
+/* Copy SRC to DEST, returning the address of the terminating '\0' in DEST.  */
+#define dcgettext(a, b, c) b
+extern char *
+stpcpy (char *dest, const char *src);
+
+char *
+__stpcpy (char *dest, const char *src)
+{
+  register char *d = dest;
+  register const char *s = src;
+
+  do
+    *d++ = *s;
+  while (*s++ != '\0');
+
+  return d - 1;
+}
+__weak_alias (stpcpy, __stpcpy);
 
 typedef int (*disassembler_ftype)(bfd_vma, disassemble_info *);
 
@@ -100,7 +122,6 @@ extern disassembler_ftype arc_get_disassembler (void *);
 extern disassembler_ftype cris_get_disassembler (bfd *);
 
 extern void print_aarch64_disassembler_options (FILE *);
-extern void print_i386_disassembler_options (FILE *);
 extern void print_mips_disassembler_options (FILE *);
 extern void print_ppc_disassembler_options (FILE *);
 extern void print_arm_disassembler_options (FILE *);
@@ -136,326 +157,6 @@ extern bfd_boolean generic_symbol_is_valid (asymbol *,
 extern void init_disassemble_info (struct disassemble_info *dinfo,
                                    void *stream, fprintf_ftype fprintf_func);
 
-extern char *gettext (const char *__msgid)
-    __attribute__ ((__nothrow__, __leaf__))
-    __attribute__ ((__format_arg__ (1)));
-
-extern char *dgettext (const char *__domainname, const char *__msgid)
-    __attribute__ ((__nothrow__, __leaf__))
-    __attribute__ ((__format_arg__ (2)));
-extern char *__dgettext (const char *__domainname, const char *__msgid)
-    __attribute__ ((__nothrow__, __leaf__))
-    __attribute__ ((__format_arg__ (2)));
-
-extern char *dcgettext (const char *__domainname, const char *__msgid,
-                        int __category) __attribute__ ((__nothrow__, __leaf__))
-__attribute__ ((__format_arg__ (2)));
-extern char *__dcgettext (const char *__domainname, const char *__msgid,
-                          int __category)
-    __attribute__ ((__nothrow__, __leaf__))
-    __attribute__ ((__format_arg__ (2)));
-
-extern char *ngettext (const char *__msgid1, const char *__msgid2,
-                       unsigned long int __n)
-    __attribute__ ((__nothrow__, __leaf__))
-    __attribute__ ((__format_arg__ (1))) __attribute__ ((__format_arg__ (2)));
-
-extern char *dngettext (const char *__domainname, const char *__msgid1,
-                        const char *__msgid2, unsigned long int __n)
-    __attribute__ ((__nothrow__, __leaf__))
-    __attribute__ ((__format_arg__ (2))) __attribute__ ((__format_arg__ (3)));
-
-extern char *dcngettext (const char *__domainname, const char *__msgid1,
-                         const char *__msgid2, unsigned long int __n,
-                         int __category)
-    __attribute__ ((__nothrow__, __leaf__))
-    __attribute__ ((__format_arg__ (2))) __attribute__ ((__format_arg__ (3)));
-
-extern char *textdomain (const char *__domainname)
-    __attribute__ ((__nothrow__, __leaf__));
-
-extern char *bindtextdomain (const char *__domainname, const char *__dirname)
-    __attribute__ ((__nothrow__, __leaf__));
-
-extern char *bind_textdomain_codeset (const char *__domainname,
-                                      const char *__codeset)
-    __attribute__ ((__nothrow__, __leaf__));
-
-struct lconv
-{
-
-  char *decimal_point;
-  char *thousands_sep;
-
-  char *grouping;
-
-  char *int_curr_symbol;
-  char *currency_symbol;
-  char *mon_decimal_point;
-  char *mon_thousands_sep;
-  char *mon_grouping;
-  char *positive_sign;
-  char *negative_sign;
-  char int_frac_digits;
-  char frac_digits;
-
-  char p_cs_precedes;
-
-  char p_sep_by_space;
-
-  char n_cs_precedes;
-
-  char n_sep_by_space;
-
-  char p_sign_posn;
-  char n_sign_posn;
-
-  char int_p_cs_precedes;
-
-  char int_p_sep_by_space;
-
-  char int_n_cs_precedes;
-
-  char int_n_sep_by_space;
-
-  char int_p_sign_posn;
-  char int_n_sign_posn;
-};
-
-extern char *setlocale (int __category, const char *__locale)
-    __attribute__ ((__nothrow__, __leaf__));
-
-extern struct lconv *localeconv (void) __attribute__ ((__nothrow__, __leaf__));
-
-extern __locale_t newlocale (int __category_mask, const char *__locale,
-                             __locale_t __base)
-    __attribute__ ((__nothrow__, __leaf__));
-extern __locale_t duplocale (__locale_t __dataset)
-    __attribute__ ((__nothrow__, __leaf__));
-
-extern void freelocale (__locale_t __dataset)
-    __attribute__ ((__nothrow__, __leaf__));
-
-extern __locale_t uselocale (__locale_t __dataset)
-    __attribute__ ((__nothrow__, __leaf__));
-
-typedef long int ptrdiff_t;
-
-extern void unlock_stream (FILE *);
-
-extern void unlock_std_streams (void);
-
-extern FILE *fopen_unlocked (const char *, const char *);
-extern FILE *fdopen_unlocked (int, const char *);
-extern FILE *freopen_unlocked (const char *, const char *, FILE *);
-
-extern char **buildargv (const char *) __attribute__ ((__malloc__));
-
-extern void freeargv (char **);
-
-extern char **dupargv (char **) __attribute__ ((__malloc__));
-
-extern void expandargv (int *, char ***);
-
-extern int writeargv (char **, FILE *);
-
-extern int countargv (char **);
-extern const char *lbasename (const char *)
-    __attribute__ ((__returns_nonnull__)) __attribute__ ((__nonnull__ (1)));
-
-extern const char *dos_lbasename (const char *)
-    __attribute__ ((__returns_nonnull__)) __attribute__ ((__nonnull__ (1)));
-
-extern const char *unix_lbasename (const char *)
-    __attribute__ ((__returns_nonnull__)) __attribute__ ((__nonnull__ (1)));
-
-extern char *lrealpath (const char *);
-
-extern char *concat (const char *, ...) __attribute__ ((__malloc__))
-__attribute__ ((__returns_nonnull__)) __attribute__ ((__sentinel__));
-extern char *reconcat (char *, const char *, ...) __attribute__ ((__malloc__))
-__attribute__ ((__returns_nonnull__)) __attribute__ ((__sentinel__));
-
-extern unsigned long concat_length (const char *, ...)
-    __attribute__ ((__sentinel__));
-
-extern char *concat_copy (char *, const char *, ...)
-    __attribute__ ((__returns_nonnull__)) __attribute__ ((__nonnull__ (1)))
-    __attribute__ ((__sentinel__));
-
-extern char *concat_copy2 (const char *, ...)
-    __attribute__ ((__returns_nonnull__)) __attribute__ ((__sentinel__));
-
-extern char *libiberty_concat_ptr;
-extern int fdmatch (int fd1, int fd2);
-extern char *getpwd (void);
-extern long get_run_time (void);
-
-extern char *make_relative_prefix (const char *, const char *, const char *)
-    __attribute__ ((__malloc__));
-
-extern char *make_relative_prefix_ignore_links (const char *, const char *,
-                                                const char *)
-    __attribute__ ((__malloc__));
-
-extern char *choose_temp_base (void) __attribute__ ((__malloc__))
-__attribute__ ((__returns_nonnull__));
-
-extern char *make_temp_file (const char *) __attribute__ ((__malloc__));
-
-extern int unlink_if_ordinary (const char *);
-
-extern const char *spaces (int count);
-
-extern int errno_max (void);
-
-extern const char *strerrno (int);
-
-extern int strtoerrno (const char *);
-
-extern char *xstrerror (int) __attribute__ ((__returns_nonnull__));
-
-extern int signo_max (void);
-extern const char *strsigno (int);
-
-extern int strtosigno (const char *);
-
-extern int xatexit (void (*fn)(void));
-
-extern void xexit (int status) __attribute__ ((__noreturn__));
-
-extern void xmalloc_set_program_name (const char *);
-
-extern void xmalloc_failed (size_t) __attribute__ ((__noreturn__));
-
-extern void *xmalloc (size_t) __attribute__ ((__malloc__))
-__attribute__ ((__returns_nonnull__));
-
-extern void *xrealloc (void *, size_t) __attribute__ ((__returns_nonnull__));
-
-extern void *xcalloc (size_t, size_t) __attribute__ ((__malloc__))
-__attribute__ ((__returns_nonnull__));
-
-extern char *xstrdup (const char *) __attribute__ ((__malloc__))
-__attribute__ ((__returns_nonnull__));
-
-extern char *xstrndup (const char *, size_t) __attribute__ ((__malloc__))
-__attribute__ ((__returns_nonnull__));
-
-extern void *xmemdup (const void *, size_t, size_t)
-    __attribute__ ((__malloc__)) __attribute__ ((__returns_nonnull__));
-
-extern double physmem_total (void);
-extern double physmem_available (void);
-
-extern unsigned int xcrc32 (const unsigned char *, int, unsigned int);
-extern const unsigned char _hex_value[256];
-extern void hex_init (void);
-extern struct pex_obj *pex_init (int flags, const char *pname,
-                                 const char *tempbase)
-    __attribute__ ((__returns_nonnull__));
-extern const char *pex_run (struct pex_obj *obj, int flags,
-                            const char *executable, char *const *argv,
-                            const char *outname, const char *errname,
-                            int *err);
-extern const char *pex_run_in_environment (struct pex_obj *obj, int flags,
-                                           const char *executable,
-                                           char *const *argv, char *const *env,
-                                           const char *outname,
-                                           const char *errname, int *err);
-
-extern FILE *pex_input_file (struct pex_obj *obj, int flags,
-                             const char *in_name);
-
-extern FILE *pex_input_pipe (struct pex_obj *obj, int binary);
-
-extern FILE *pex_read_output (struct pex_obj *, int binary);
-
-extern FILE *pex_read_err (struct pex_obj *, int binary);
-
-extern int pex_get_status (struct pex_obj *, int count, int *vector);
-
-struct pex_time
-{
-  unsigned long user_seconds;
-  unsigned long user_microseconds;
-  unsigned long system_seconds;
-  unsigned long system_microseconds;
-};
-
-extern int pex_get_times (struct pex_obj *, int count,
-                          struct pex_time *vector);
-
-extern void pex_free (struct pex_obj *);
-extern const char *pex_one (int flags, const char *executable,
-                            char *const *argv, const char *pname,
-                            const char *outname, const char *errname,
-                            int *status, int *err);
-extern int pexecute (const char *, char *const *, const char *, const char *,
-                     char **, char **, int);
-
-extern int pwait (int, int *, int);
-
-extern int asprintf (char **, const char *, ...)
-    __attribute__ ((__format__ (__printf__, 2, 3)))
-    __attribute__ ((__nonnull__ (2)));
-
-extern int vasprintf (char **, const char *, va_list)
-    __attribute__ ((__format__ (__printf__, 2, 0)))
-    __attribute__ ((__nonnull__ (2)));
-extern void setproctitle (const char *name, ...);
-
-extern void stack_limit_increase (unsigned long);
-extern void *C_alloca (size_t) __attribute__ ((__malloc__));
-
-typedef long int __jmp_buf[8];
-
-struct __jmp_buf_tag
-{
-
-  __jmp_buf __jmpbuf;
-  int __mask_was_saved;
-  __sigset_t __saved_mask;
-};
-
-typedef struct __jmp_buf_tag jmp_buf[1];
-
-extern int setjmp (jmp_buf __env) __attribute__ ((__nothrow__));
-
-extern int __sigsetjmp (struct __jmp_buf_tag __env[1], int __savemask)
-    __attribute__ ((__nothrow__));
-
-extern int _setjmp (struct __jmp_buf_tag __env[1])
-    __attribute__ ((__nothrow__));
-
-extern void longjmp (struct __jmp_buf_tag __env[1], int __val)
-    __attribute__ ((__nothrow__)) __attribute__ ((__noreturn__));
-
-extern void _longjmp (struct __jmp_buf_tag __env[1], int __val)
-    __attribute__ ((__nothrow__)) __attribute__ ((__noreturn__));
-
-typedef struct __jmp_buf_tag sigjmp_buf[1];
-extern void siglongjmp (sigjmp_buf __env, int __val)
-    __attribute__ ((__nothrow__)) __attribute__ ((__noreturn__));
-
-extern void longjmp (struct __jmp_buf_tag __env[1],
-                     int __val) __asm__(""
-                                        "__longjmp_chk")
-    __attribute__ ((__nothrow__))
-
-    __attribute__ ((__noreturn__));
-extern void _longjmp (struct __jmp_buf_tag __env[1],
-                      int __val) __asm__(""
-                                         "__longjmp_chk")
-    __attribute__ ((__nothrow__))
-
-    __attribute__ ((__noreturn__));
-extern void siglongjmp (struct __jmp_buf_tag __env[1],
-                        int __val) __asm__(""
-                                           "__longjmp_chk")
-    __attribute__ ((__nothrow__))
-
-    __attribute__ ((__noreturn__));
 
 static int print_insn (bfd_vma, disassemble_info *);
 static void dofloat (int);
@@ -18220,59 +17921,6 @@ print_insn_i386 (bfd_vma pc, disassemble_info *info)
   return print_insn (pc, info);
 }
 
-void
-print_i386_disassembler_options (FILE *stream)
-{
-  fprintf (
-      stream,
-      dcgettext ("bfd", "\nThe following i386/x86-64 specific disassembler "
-                        "options are supported for use\nwith the -M switch "
-                        "(multiple options should be separated by commas):\n",
-                 5)
-
-          );
-
-  fprintf (stream,
-           dcgettext ("bfd", "  x86-64      Disassemble in 64bit mode\n", 5));
-  fprintf (stream,
-           dcgettext ("bfd", "  i386        Disassemble in 32bit mode\n", 5));
-  fprintf (stream,
-           dcgettext ("bfd", "  i8086       Disassemble in 16bit mode\n", 5));
-  fprintf (stream,
-           dcgettext ("bfd",
-                      "  att         Display instruction in AT&T syntax\n",
-                      5));
-  fprintf (stream,
-           dcgettext ("bfd",
-                      "  intel       Display instruction in Intel syntax\n",
-                      5));
-  fprintf (stream,
-           dcgettext ("bfd",
-                      "  att-mnemonic\n"
-                      "              Display instruction in AT&T mnemonic\n",
-                      5));
-  fprintf (stream,
-           dcgettext ("bfd",
-                      "  intel-mnemonic\n"
-                      "              Display instruction in Intel mnemonic\n",
-                      5));
-  fprintf (stream,
-           dcgettext ("bfd", "  addr64      Assume 64bit address size\n", 5));
-  fprintf (stream,
-           dcgettext ("bfd", "  addr32      Assume 32bit address size\n", 5));
-  fprintf (stream,
-           dcgettext ("bfd", "  addr16      Assume 16bit address size\n", 5));
-  fprintf (stream,
-           dcgettext ("bfd", "  data32      Assume 32bit data size\n", 5));
-  fprintf (stream,
-           dcgettext ("bfd", "  data16      Assume 16bit data size\n", 5));
-  fprintf (
-      stream,
-      dcgettext (
-          "bfd",
-          "  suffix      Always display instruction suffix in AT&T syntax\n",
-          5));
-}
 
 static const struct dis386 bad_opcode = { "(bad)", { { ((void *)0), 0 } } };
 
