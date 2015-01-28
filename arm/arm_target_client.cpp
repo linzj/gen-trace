@@ -154,8 +154,12 @@ void
 arm_dis_client::fill_buffer (void *b)
 {
   assert (desc_.get () != nullptr);
-  memcpy (b, desc_->data (),
-          sizeof (post_process_trampoline_desc) * desc_->size ());
+  char *b_1 = static_cast<char *> (b);
+  for (auto &e : *desc_)
+    {
+      memcpy (b_1, &e, sizeof (post_process_trampoline_desc));
+      b_1 += sizeof (post_process_trampoline_desc);
+    }
 }
 
 static inline bool
