@@ -1,6 +1,7 @@
 #ifndef BASE_CONTROLLER_H
 #define BASE_CONTROLLER_H
 #include <stdint.h>
+#include <vector>
 class config_desc;
 class config_module;
 
@@ -25,17 +26,21 @@ public:
   void detain ();
 
 private:
-  void do_rest_with_config (config_desc *desc);
+  bool do_rest_with_config (config_desc *desc);
   config_desc *fill_config (fp_line_client *);
   intptr_t find_base (config_module *);
   bool should_add_base_to_sym_base (intptr_t module_base);
   void do_modify (config_desc *);
   bool is_base_elf (intptr_t base);
+  void start_thread (config_desc *desc);
+  void reset_config (config_desc *desc);
   static void *thread_worker (void *);
 
   pfn_called_callback called_callback_;
   pfn_ret_callback return_callback_;
   config_desc *config_desc_;
   int ref_count_;
+  typedef std::vector<config_module *> module_list;
+  module_list fail_modules_;
 };
 #endif /* BASE_CONTROLLER_H */

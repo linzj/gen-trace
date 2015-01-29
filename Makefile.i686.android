@@ -95,13 +95,13 @@ dis_i686_test: i686/dis.o i686/dis_test.o i686/dis_gnu.o log.o disassembler.o di
 hook_template_test: i686/hook_template_test.o i686/hook_template.o log.o
 	$(CXX) $(LDFLAGS) -o $@ $^ $(LDLIBS)
 
-i686_target_client_test: i686/hook_template_i686.o i686/hook_template.o i686/dis.o i686/dis_gnu.o i686/i686_target_client.o i686/i686_target_client_test.o code_manager_impl.o log.o code_modify.o mem_modify.o disassembler.o dis_client.o base_target_client.o
+i686_target_client_test: i686/hook_template.o i686/hook_template.o i686/dis.o i686/dis_gnu.o i686/i686_target_client.o i686/i686_target_client_test.o code_manager_impl.o log.o code_modify.o mem_modify.o disassembler.o dis_client.o base_target_client.o
 	$(CXX) $(LDFLAGS) -o $@ $^ $(LDLIBS)
 
 libbase_controller_test_lib.so: base_controller_test_lib.o log.o
 	$(CXX) $(LDFLAGS) -shared -o $@ $^ $(LDLIBS)
 
-base_controller_test: config_reader.o  base_controller.o code_manager_impl.o log.o code_modify.o mem_modify.o i686/hook_template_i686.o i686/hook_template.o  i686/dis.o i686/dis_gnu.o i686/i686_target_client.o base_controller_test.o libbase_controller_test_lib.so disassembler.o dis_client.o base_target_client.o
+base_controller_test: config_reader.o  base_controller.o code_manager_impl.o log.o code_modify.o mem_modify.o i686/hook_template.o i686/hook_template.o  i686/dis.o i686/dis_gnu.o i686/i686_target_client.o base_controller_test.o libbase_controller_test_lib.so disassembler.o dis_client.o base_target_client.o
 	$(CXX) $(LDFLAGS) -o $@ $(filter %.o, $^) $(LDLIBS)
 
 clean:

@@ -34,7 +34,7 @@ fp_line_client::~fp_line_client () {}
 base_controller::base_controller (pfn_called_callback called_callback,
                                   pfn_ret_callback return_callback)
     : called_callback_ (called_callback), return_callback_ (return_callback),
-      config_desc_ (NULL), ref_count_ (1)
+      config_desc_ (nullptr), ref_count_ (1)
 {
 }
 base_controller::~base_controller ()
@@ -61,36 +61,47 @@ base_controller::do_it ()
     }
   if (config_desc->sleep_sec != 0)
     {
-      pthread_t mythread;
-      config_desc_ = config_desc;
-      retain ();
-      pthread_create (&mythread, NULL, thread_worker, this);
-      pthread_detach (mythread);
+      start_thread (config_desc);
     }
   else
     {
-      do_rest_with_config (config_desc);
-      free (config_desc);
+      if (do_rest_with_config (config_desc))
+        {
+          free (config_desc);
+        }
+      else
+        {
+          start_thread (config_desc);
+        }
     }
 }
 
-void
+bool
 base_controller::do_rest_with_config (config_desc *config_desc)
 {
+  bool is_completed = true;
   for (int i = 0; i < config_desc->num_of_modules; ++i)
     {
       struct config_module *module = &config_desc->modules[i];
+      if (module->desc_array_size <= 0)
+        continue;
+      // that mean this module is ignored.
+      if (module->desc_array[0].ignore)
+        continue;
       intptr_t base = find_base (module);
       if (base == 0)
         {
           LOGE ("base_controller::do_rest_with_config base equals to zero for "
                 "%s, %d symbols.\n",
                 module->module_name, module->desc_array_size);
+          is_completed = false;
+
           // zero the code point to tell modifier to ignore them.
           for (int j = 0; j < module->desc_array_size; ++j)
             {
-              module->desc_array[j].code_point = NULL;
+              module->desc_array[j].ignore = true;
             }
+          fail_modules_.push_back (module);
           continue;
         }
       if (should_add_base_to_sym_base (base))
@@ -105,6 +116,20 @@ base_controller::do_rest_with_config (config_desc *config_desc)
         }
     }
   do_modify (config_desc);
+  // if not complete, mark all symbols ignored.
+  // The fail modules will be remarked as not-ignored later.
+  if (!is_completed)
+    {
+      for (int i = 0; i < config_desc->num_of_modules; ++i)
+        {
+          struct config_module *module = &config_desc->modules[i];
+          for (int j = 0; j < module->desc_array_size; ++j)
+            {
+              module->desc_array[j].ignore = true;
+            }
+        }
+    }
+  return is_completed;
 }
 
 config_desc *
@@ -120,7 +145,7 @@ base_controller::fill_config (fp_line_client *fp_client)
       errno = 0;
     }
 
-  while ((line = fp_client->next_line ()) != NULL)
+  while ((line = fp_client->next_line ()) != nullptr)
     {
       // work around the stupid C implementation of android.
       errno = 0;
@@ -145,7 +170,7 @@ base_controller::find_base (struct config_module *module)
   search_for_module.insert (0, "/");
   LOGI ("base_controller::find_base search for module: %s\n",
         search_for_module.c_str ());
-  while ((str = fgets (buf, 2048, fp)) != NULL)
+  while ((str = fgets (buf, 2048, fp)) != nullptr)
     {
       char *test;
       if ((test = strstr (str, search_for_module.c_str ()))
@@ -155,14 +180,14 @@ base_controller::find_base (struct config_module *module)
         }
     }
   fclose (fp);
-  if (str == NULL)
+  if (str == nullptr)
     {
       LOGE ("fails to find module at proc maps\n");
       return 0;
     }
   // work around the stupid C implementation of android.
   errno = 0;
-  unsigned long int l = strtoul (str, NULL, 16);
+  unsigned long int l = strtoul (str, nullptr, 16);
   if (errno != 0)
     {
       LOGE ("strtol fails %s for %s\n", strerror (errno), str);
@@ -220,11 +245,25 @@ base_controller::thread_worker (void *self)
   config_desc *config_desc = _self->config_desc_;
   LOGI ("base_controller::thread_worker, begin to sleep.\n");
   timespec spec = { config_desc->sleep_sec, 0 };
-  nanosleep (&spec, NULL);
+  nanosleep (&spec, nullptr);
   LOGI ("base_controller::thread_worker, end sleep.\n");
-  _self->do_rest_with_config (config_desc);
+  if (!_self->fail_modules_.empty ())
+    {
+      struct timespec sleep_time = { 0, 500 * 1000000 };
+      nanosleep (&sleep_time, nullptr);
+      // reset config_desc
+      _self->reset_config (config_desc);
+    }
+  while (!_self->do_rest_with_config (config_desc))
+    {
+      struct timespec sleep_time = { 0, 500 * 1000000 };
+      nanosleep (&sleep_time, nullptr);
+      // reset config_desc
+      _self->reset_config (config_desc);
+    }
   _self->detain ();
-  return NULL;
+  LOGI ("base_controller::thread_worker exiting.\n");
+  return nullptr;
 }
 
 void
@@ -241,4 +280,27 @@ base_controller::detain ()
     {
       delete this;
     }
+}
+
+void
+base_controller::start_thread (config_desc *desc)
+{
+  pthread_t mythread;
+  config_desc_ = desc;
+  retain ();
+  pthread_create (&mythread, nullptr, thread_worker, this);
+  pthread_detach (mythread);
+}
+
+void
+base_controller::reset_config (config_desc *desc)
+{
+  for (auto module : fail_modules_)
+    {
+      for (int j = 0; j < module->desc_array_size; ++j)
+        {
+          module->desc_array[j].ignore = false;
+        }
+    }
+  fail_modules_.clear ();
 }

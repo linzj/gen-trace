@@ -220,6 +220,7 @@ config_reader::accumulate ()
               = static_cast<char *> (allocator.alloc (r.sym_name.size () + 1));
           strcpy (sym_name, r.sym_name.c_str ());
           indexer->name = sym_name;
+          indexer->ignore = false;
         }
 
       modules[i].module_name = module_name;

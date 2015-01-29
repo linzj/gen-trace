@@ -117,6 +117,8 @@ struct code_modify_desc
   void *code_point;
   const char *name;
   int size;
+  // for controller to mark this desc is not used currently.
+  bool ignore;
 };
 
 int code_modify (const code_modify_desc *code_points, int count_of,

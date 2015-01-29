@@ -149,7 +149,18 @@ code_modify (const code_modify_desc *code_points, int count_of,
 
   if (g_log_for_fail)
     {
-      fp_for_fail = fopen (g_log_for_fail, "w");
+      static bool first_come = true;
+      const char *open_mode;
+      if (first_come)
+        {
+          open_mode = "w";
+          first_come = false;
+        }
+      else
+        {
+          open_mode = "a";
+        }
+      fp_for_fail = fopen (g_log_for_fail, open_mode);
     }
   for (int i = 0; i < count_of; ++i)
     {
@@ -157,7 +168,7 @@ code_modify (const code_modify_desc *code_points, int count_of,
       const char *name = code_points[i].name;
       int size = code_points[i].size;
       // That means this code point should be ignored.
-      if (code_point == nullptr)
+      if (code_points[i].ignore)
         continue;
       check_code_result_buffer *b
           = g_client->check_code (code_point, name, size);
