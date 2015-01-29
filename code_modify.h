@@ -75,7 +75,7 @@ public:
     check_code_not_accept,
     check_code_back_edge,
     check_code_too_small,
-    check_code_memory,
+    check_code_child_exit,
     check_code_build_machine_define2,
   };
   enum build_trampoline_status
