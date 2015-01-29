@@ -71,10 +71,8 @@ struct ThreadInfo
   CTraceStruct stack_[max_stack];
   int stack_end_;
   bool at_work_;
+  struct ThreadInfo *prev_;
 
-#ifdef STR_TO_ENABLE
-  bool enable_;
-#endif
   ThreadInfo ();
   int64_t UpdateVirtualTime (bool fromStart);
   static ThreadInfo *New ();
@@ -125,11 +123,9 @@ ThreadInfo::ThreadInfo ()
   pid_ = getpid ();
   tid_ = syscall (__NR_gettid, 0);
   virtual_time_ = 0;
-#ifdef STR_TO_ENABLE
-  enable_ = false;
-#endif // STR_TO_ENABLE
   at_work_ = false;
   stack_end_ = 0;
+  prev_ = nullptr;
 }
 
 void
@@ -198,17 +194,29 @@ GetThreadInfo ()
   return tinfo;
 }
 
-void
-DeleteThreadInfo (void *tinfo)
+static void
+delete_one_thread_info (ThreadInfo *tinfo)
 {
-  static_cast<ThreadInfo *> (tinfo)->~ThreadInfo ();
-  FreeListNode *free_node = static_cast<FreeListNode *> (tinfo);
+  tinfo->~ThreadInfo ();
+  FreeListNode *free_node = reinterpret_cast<FreeListNode *> (tinfo);
   while (true)
     {
       FreeListNode *current_free = free_head;
       free_node->next_ = current_free;
       if (__sync_bool_compare_and_swap (&free_head, current_free, free_node))
         break;
+    }
+}
+
+static void
+delete_thread_infos (void *tinfo)
+{
+  ThreadInfo *curr = static_cast<ThreadInfo *> (tinfo);
+  while (curr)
+    {
+      ThreadInfo *prev = curr->prev_;
+      delete_one_thread_info (curr);
+      curr = prev;
     }
 }
 
@@ -234,7 +242,7 @@ timer_func (void *)
       while (nanosleep_ret == -1 && EINTR == errno);
       s_time += frequency;
     }
-  return NULL;
+  return nullptr;
 }
 
 struct Initializer
@@ -245,7 +253,7 @@ struct Initializer
     ThreadInfo *info_store = reinterpret_cast<ThreadInfo *> (info_store_char);
     free_head
         = reinterpret_cast<FreeListNode *> (&info_store[MAX_THREADS - 1]);
-    free_head->next_ = NULL;
+    free_head->next_ = nullptr;
     for (int i = MAX_THREADS - 2; i >= 0; --i)
       {
         FreeListNode *current
@@ -257,7 +265,7 @@ struct Initializer
 
   Initializer ()
   {
-    pthread_key_create (&thread_info_key, DeleteThreadInfo);
+    pthread_key_create (&thread_info_key, delete_thread_infos);
     InitFreeList ();
 
     char buffer[256];
@@ -265,11 +273,11 @@ struct Initializer
     file_to_write = fopen (buffer, "w");
     fprintf (file_to_write, "{\"traceEvents\": [");
     pthread_t my_writer_thread;
-    pthread_create (&my_writer_thread, NULL, WriterThread, NULL);
+    pthread_create (&my_writer_thread, nullptr, WriterThread, nullptr);
     pthread_detach (my_writer_thread);
     // timer initialize, the timer_func is used to update s_time in a pthread.
     pthread_t thread_timer;
-    if (-1 == pthread_create (&thread_timer, NULL, timer_func, NULL))
+    if (-1 == pthread_create (&thread_timer, nullptr, timer_func, nullptr))
       {
         LOGE ("timer thread fails to start: %s\n", strerror (errno));
         CRASH ();
@@ -381,18 +389,18 @@ WriterThread (void *)
           while (true)
             {
               record_to_write = pending_records_head;
-              if (record_to_write == NULL)
+              if (record_to_write == nullptr)
                 break;
               if (__sync_bool_compare_and_swap (&pending_records_head,
-                                                record_to_write, NULL))
+                                                record_to_write, nullptr))
                 break;
             }
-          if (record_to_write == NULL)
+          if (record_to_write == nullptr)
             break;
           DoWriteRecursive (record_to_write);
         }
     }
-  return NULL;
+  return nullptr;
 }
 }
 
@@ -421,7 +429,7 @@ print_data (char *data)
     }
   for (int i = 0; i < len; ++i)
     {
-      sum += snprintf (NULL, 0, "\\x%x", data_1[i]);
+      sum += snprintf (nullptr, 0, "\\x%x", data_1[i]);
     }
   char buf[sum + 1];
   int sum_1 = 0;
@@ -440,22 +448,12 @@ __start_ctrace__ (void *original_ret, const char *name)
     return;
   ThreadInfo *tinfo = GetThreadInfo ();
   if (tinfo->at_work_)
-    CRASH ();
-  tinfo->at_work_ = true;
-#ifdef STR_TO_ENABLE
-  if (!tinfo->enable_)
     {
-      if (strstr (name, STR_TO_ENABLE))
-        {
-          tinfo->enable_ = true;
-        }
-      else
-        {
-          tinfo->at_work_ = false;
-          return;
-        }
+      ThreadInfo *prev = tinfo;
+      tinfo = ThreadInfo::New ();
+      tinfo->prev_ = prev;
     }
-#endif // STR_TO_ENABLE
+  tinfo->at_work_ = true;
   int64_t currentTime = tinfo->UpdateVirtualTime (true);
 
   tinfo->Push (name, currentTime, original_ret);
@@ -476,15 +474,8 @@ __end_ctrace__ (const char *name)
     {
       c = tinfo->Pop ();
       int64_t currentTime = tinfo->UpdateVirtualTime (false);
-      if (file_to_write != NULL)
+      if (file_to_write != nullptr)
         {
-#ifdef STR_TO_ENABLE
-          if (!tinfo->enable_)
-            {
-              tinfo->at_work_ = false;
-              return c.ret_addr_;
-            }
-#endif // STR_TO_ENABLE
           if (c.start_time_ != invalid_time)
             {
               // we should record this
@@ -498,10 +489,15 @@ __end_ctrace__ (const char *name)
           break;
         }
     }
-#ifdef STR_TO_ENABLE
-  if (tinfo->stack_end_ == 0)
-    tinfo->enable_ = false;
-#endif // STR_TO_ENABLE
+
+  void *ret = c.ret_addr_;
+  if (tinfo->stack_end_ == 0 && tinfo->prev_)
+    {
+      // restore to prev
+      pthread_setspecific (thread_info_key, tinfo->prev_);
+      delete_one_thread_info (tinfo);
+      return ret;
+    }
   tinfo->at_work_ = false;
-  return c.ret_addr_;
+  return ret;
 }
