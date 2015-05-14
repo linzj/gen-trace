@@ -182,20 +182,9 @@ should_lower_branch (char *addr, intptr_t jumpto, size_t current_offset)
 }
 
 static std::unordered_map<std::string, int> g_condi_keywords
-    = { { "eq", 0 },
-        { "ne", 1 },
-        { "cs", 2 },
-        { "cc", 3 },
-        { "mi", 4 },
-        { "pl", 5 },
-        { "vs", 6 },
-        { "vc", 7 },
-        { "hi", 8 },
-        { "ls", 9 },
-        { "ge", 10 },
-        { "lt", 11 },
-        { "gt", 12 },
-        { "le", 13 } };
+    = { { "eq", 0 },  { "ne", 1 },  { "cs", 2 },  { "cc", 3 }, { "mi", 4 },
+        { "pl", 5 },  { "vs", 6 },  { "vc", 7 },  { "hi", 8 }, { "ls", 9 },
+        { "ge", 10 }, { "lt", 11 }, { "gt", 12 }, { "le", 13 } };
 
 static bool
 is_conditional_code (const char *str)
@@ -269,32 +258,19 @@ arm_dis_client::on_instr_1 (const char *dis_str, char *start, size_t s)
     const char *instr_name;
     int size;
     enum instr_type type;
-  } check_list[] = { { "mov", 3, MOV_TYPE },
-                     { "push", 4, PUSH_TYPE },
-                     { "pop", 3, POP_TYPE },
-                     { "ldr", 3, LDR_TYPE },
-                     { "str", 3, STR_TYPE },
-                     { "stm", 3, STM_TYPE },
-                     { "ldm", 3, LDM_TYPE },
-                     { "add", 3, ADD_TYPE },
-                     { "sub", 3, SUB_TYPE },
-                     { "mul", 3, MUL_TYPE },
-                     { "div", 3, DIV_TYPE },
-                     { "xor", 3, XOR_TYPE },
-                     { "or", 2, OR_TYPE },
-                     { "and", 3, AND_TYPE },
-                     { "not", 3, NOT_TYPE },
-                     { "cmp", 3, CMP_TYPE },
-                     { "lsl", 3, LSL_TYPE },
-                     { "lsr", 3, LSR_TYPE },
-                     { "asr", 3, ASR_TYPE },
-                     { "cb", 2, CB_TYPE },
-                     { "asl", 3, ASL_TYPE },
-                     { "tst", 3, TST_TYPE },
-                     { "mvn", 3, MVN_TYPE },
-                     { "b", 1, B_TYPE },
-                     { "vpush", 5, VPUSH_TYPE },
-                     { "vld", 3, VLD_TYPE },
+  } check_list[] = { { "mov", 3, MOV_TYPE },     { "push", 4, PUSH_TYPE },
+                     { "pop", 3, POP_TYPE },     { "ldr", 3, LDR_TYPE },
+                     { "str", 3, STR_TYPE },     { "stm", 3, STM_TYPE },
+                     { "ldm", 3, LDM_TYPE },     { "add", 3, ADD_TYPE },
+                     { "sub", 3, SUB_TYPE },     { "mul", 3, MUL_TYPE },
+                     { "div", 3, DIV_TYPE },     { "xor", 3, XOR_TYPE },
+                     { "or", 2, OR_TYPE },       { "and", 3, AND_TYPE },
+                     { "not", 3, NOT_TYPE },     { "cmp", 3, CMP_TYPE },
+                     { "lsl", 3, LSL_TYPE },     { "lsr", 3, LSR_TYPE },
+                     { "asr", 3, ASR_TYPE },     { "cb", 2, CB_TYPE },
+                     { "asl", 3, ASL_TYPE },     { "tst", 3, TST_TYPE },
+                     { "mvn", 3, MVN_TYPE },     { "b", 1, B_TYPE },
+                     { "vpush", 5, VPUSH_TYPE }, { "vld", 3, VLD_TYPE },
                      { "vmov", 4, VMOV_TYPE } };
   enum instr_type instr_type;
   for (size_t i = 0; i < sizeof (check_list) / sizeof (check_list[0]); ++i)
@@ -458,8 +434,13 @@ arm_dis_client::on_instr_1 (const char *dis_str, char *start, size_t s)
             }
           if (instr_type == LDR_TYPE)
             {
+              // ldr rn, [pc, rx] case
+              if (last_addr_ == -1)
+                {
+                  is_accept_ = false;
+                  break;
+                }
               // ldr rn,[pc, #?] case
-              assert (last_addr_ != -1);
               int rn = operand[1] - '0';
               if (rn > 9)
                 {
@@ -509,12 +490,20 @@ arm_dis_client::on_instr_1 (const char *dis_str, char *start, size_t s)
                       if ((operand3 = strchr (operand2, ',')))
                         {
                           operand3 += 3;
+                          if (operand3[-1] != '#')
+                            {
+                              // add rn, pc, rx case, must fail.
+                              // failed.
+                              operand2 = NULL;
+                              break;
+                            }
                           errno = 0;
                           offset = strtol (operand3, NULL, 10);
                           if (errno)
                             {
                               // failed.
                               operand2 = NULL;
+                              break;
                             }
                           offset_exists = true;
                         }
