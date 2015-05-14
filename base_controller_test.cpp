@@ -10,17 +10,29 @@
 
 #if defined(__x86_64__)
 static const char *test_lines[] = {
-  "here\n", "0\n", "module start\n", "libbase_controller_test_lib.so\n",
-  "0000000000000830\n", "349\n", "original_function\n", "module end\n",
+  "here\n",
+  "0\n",
+  "module start\n",
+  "libbase_controller_test_lib.so\n",
+  "0000000000000830\n",
+  "349\n",
+  "original_function\n",
+  "module end\n",
 };
 #elif defined(__arm__)
 static const char *test_lines[] = {
-  "here\n", "0\n", "module start\n", "libbase_controller_test_lib.so\n",
-  "c85\n", "348\n", "original_function\n", "module end\n",
+  "here\n", "0\n",   "module start\n",      "libbase_controller_test_lib.so\n",
+  "c85\n",  "348\n", "original_function\n", "module end\n",
 };
 static const char *test_lines2[] = {
-  "herearm\n", "0\n", "module start\n", "libbase_controller_test_lib_arm.so\n",
-  "c84\n", "564\n", "original_function\n", "module end\n",
+  "herearm\n",
+  "0\n",
+  "module start\n",
+  "libbase_controller_test_lib_arm.so\n",
+  "c84\n",
+  "564\n",
+  "original_function\n",
+  "module end\n",
 };
 
 class test_fp_line_client_arm : public fp_line_client
@@ -40,8 +52,8 @@ private:
 };
 #elif defined(__i386__)
 static const char *test_lines[] = {
-  "here\n", "0\n", "module start\n", "libbase_controller_test_lib.so\n",
-  "635\n", "321\n", "original_function\n", "module end\n",
+  "here\n", "0\n",   "module start\n",      "libbase_controller_test_lib.so\n",
+  "635\n",  "321\n", "original_function\n", "module end\n",
 };
 
 #endif

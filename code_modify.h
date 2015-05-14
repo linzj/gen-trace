@@ -89,11 +89,13 @@ public:
   virtual std::unique_ptr<target_session> create_session () = 0;
   // check if code accept to modify, and turn the context via the 2nd argument.
   virtual check_code_result_buffer *check_code (void *, const char *,
-                                                int code_size) = 0;
+                                                int code_size)
+      = 0;
   virtual build_trampoline_status
   build_trampoline (code_manager *, target_session *session,
                     pfn_called_callback called_callback,
-                    pfn_ret_callback return_callback) = 0;
+                    pfn_ret_callback return_callback)
+      = 0;
   virtual mem_modify_instr *modify_code (target_session *) = 0;
 };
 

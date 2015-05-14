@@ -102,8 +102,8 @@ main ()
   char *template_for_hook = (char *)template_for_hook_arm;
   bool is_thumb = false;
 #endif
-  static const int template_size = (char *)template_for_hook_end
-                                   - (char *)template_for_hook;
+  static const int template_size
+      = (char *)template_for_hook_end - (char *)template_for_hook;
   intptr_t template_for_hook_addr = ((intptr_t)template_for_hook) & ~1UL;
   memcpy (&modify_pointer[4], (char *)template_for_hook_addr, template_size);
   add_jump_to_original (static_cast<char *> (code_page) + template_size

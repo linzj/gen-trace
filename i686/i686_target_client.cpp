@@ -46,24 +46,12 @@ x64_dis_client::on_instr (const char *dis_str, char *start, size_t s)
   {
     const char *instr_name;
     int size;
-  } check_list[] = { { "mov", 3 },
-                     { "add", 3 },
-                     { "sub", 3 },
-                     { "div", 3 },
-                     { "push", 4 },
-                     { "pop", 3 },
-                     { "mul", 3 },
-                     { "div", 3 },
-                     { "xor", 3 },
-                     { "pxor", 4 },
-                     { "cvtsi2", 6 },
-                     { "cltd", 4 },
-                     { "or", 2 },
-                     { "and", 3 },
-                     { "cmp", 3 },
-                     { "shr", 3 },
-                     { "shl", 3 },
-                     { "test", 4 } };
+  } check_list[]
+      = { { "mov", 3 },  { "add", 3 },  { "sub", 3 },    { "div", 3 },
+          { "push", 4 }, { "pop", 3 },  { "mul", 3 },    { "div", 3 },
+          { "xor", 3 },  { "pxor", 4 }, { "cvtsi2", 6 }, { "cltd", 4 },
+          { "or", 2 },   { "and", 3 },  { "cmp", 3 },    { "shr", 3 },
+          { "shl", 3 },  { "test", 4 } };
   for (size_t i = 0; i < sizeof (check_list) / sizeof (check_list[0]); ++i)
     {
       if (strncmp (dis_str, check_list[i].instr_name, check_list[i].size) == 0)

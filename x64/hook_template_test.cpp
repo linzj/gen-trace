@@ -70,8 +70,8 @@ main ()
   modify_pointer[1] = reinterpret_cast<void *> (hook);
   modify_pointer[2] = reinterpret_cast<void *> (original_function);
   modify_pointer[3] = reinterpret_cast<void *> (ret_hook);
-  static const int template_size = (char *)template_for_hook_end
-                                   - (char *)template_for_hook;
+  static const int template_size
+      = (char *)template_for_hook_end - (char *)template_for_hook;
   memcpy (&modify_pointer[4], (char *)template_for_hook, template_size);
   add_jump_to_original (static_cast<char *> (code_page) + template_size
                             + sizeof (intptr_t) * 4,

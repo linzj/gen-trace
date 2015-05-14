@@ -23,16 +23,20 @@ protected:
   virtual disassembler *new_disassembler () = 0;
   virtual check_code_dis_client *new_code_check_client (void *code_point) = 0;
   virtual dis_client *new_backedge_check_client (intptr_t base,
-                                                 intptr_t hookend) = 0;
+                                                 intptr_t hookend)
+      = 0;
   virtual char *template_start (intptr_t target_client) = 0;
   virtual char *template_end (intptr_t target_code_point) = 0;
   virtual bool check_jump_dist (intptr_t target_code_point,
-                                intptr_t trampoline_code_start) = 0;
+                                intptr_t trampoline_code_start)
+      = 0;
   virtual void flush_code (void *code_start, int len) = 0;
   virtual void copy_original_code (void *trampoline_code_start,
-                                   check_code_result_buffer *b) = 0;
+                                   check_code_result_buffer *b)
+      = 0;
   virtual void add_jump_to_original (char *code_start, int offset,
-                                     code_context *code_context) = 0;
+                                     code_context *code_context)
+      = 0;
   virtual int jump_back_instr_len (code_context *) = 0;
 
   // This predication show if this machine will use near jump, aka, jump

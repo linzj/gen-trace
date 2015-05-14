@@ -84,8 +84,8 @@ base_target_client::build_trampoline (code_manager *m, target_session *session,
       = (char *)_template_end - (char *)_template_start
         + b->lowered_original_code_len + jump_back_instr_len (context);
   int template_size = template_code_size + sizeof (intptr_t) * 4;
-  template_size = (template_size + sizeof (intptr_t) - 1)
-                  & ~(sizeof (intptr_t) - 1);
+  template_size
+      = (template_size + sizeof (intptr_t) - 1) & ~(sizeof (intptr_t) - 1);
   void *hint;
   if (use_target_code_point_as_hint ())
     {
@@ -108,17 +108,17 @@ base_target_client::build_trampoline (code_manager *m, target_session *session,
     return build_trampoline_jump_dist;
 
   context->trampoline_code_start = reinterpret_cast<char *> (code_start);
-  context->trampoline_code_end = reinterpret_cast<char *> (code_start)
-                                 + template_code_size;
+  context->trampoline_code_end
+      = reinterpret_cast<char *> (code_start) + template_code_size;
   // copy the hook template to code mem.
-  const int template_code_size_no_copy = (char *)_template_end
-                                         - (char *)_template_start;
+  const int template_code_size_no_copy
+      = (char *)_template_end - (char *)_template_start;
   memcpy (reinterpret_cast<void *> (code_start), (char *)_template_start,
           template_code_size_no_copy);
 
   // copy the original target code to trampoline
-  char *copy_start = reinterpret_cast<char *> (code_start)
-                     + template_code_size_no_copy;
+  char *copy_start
+      = reinterpret_cast<char *> (code_start) + template_code_size_no_copy;
 
   copy_original_code (copy_start, b);
   int lowered_original_code_len = b->lowered_original_code_len;
