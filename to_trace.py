@@ -158,9 +158,11 @@ class Parser(object):
                 return
             _tuple = line.split()
             if len(_tuple) < 2:
-                raise ParseException("line: " + line + " should be splittable")
-            tid = int(_tuple[0])
-            name = ' '.join(_tuple[1:])
+                tid = int(_tuple[0])
+                name = '<no name>'
+            else:
+                tid = int(_tuple[0])
+                name = ' '.join(_tuple[1:])
             self.m_threadInfo[tid] = name
 
     def workoutMethods(self):
