@@ -103,6 +103,7 @@ class Parser(object):
         self.m_recorder = Recorder(self.m_writer)
         self.m_recordSize = 0
         self.m_startWall = 0L
+        self.m_vmType = 0
 
     def parse(self):
        self.workoutHeader()
@@ -142,9 +143,15 @@ class Parser(object):
             raise ParseException("Expecting clock-call-overhead-nsec=")
 
         line = self.nextLine()
-        if line != "vm=dalvik":
-            raise ParseException("Expecting vm=dalvik")
+        if not line.startswith("vm="):
+            raise ParseException("Expecting vm=dalvik or vm=art")
+        else:
+            if line == "vm=art":
+                self.m_vmType = 1
         line = self.nextLine()
+        if self.m_vmType == 1:
+            if line.startswith("pid="):
+                line = self.nextLine()
         if line != "*threads":
             raise ParseException("Expecting *thread, but " + line)
 
@@ -174,8 +181,12 @@ class Parser(object):
                     raise ParseException("Expecting *end")
                 return
             _tuple = line.split()
-            if len(_tuple) != 6:
-                raise ParseException("line: " + line + " should be splittable")
+            if self.m_vmType == 0:
+                if len(_tuple) != 6:
+                    raise ParseException("line: " + line + " should be splittable")
+            elif self.m_vmType == 1:
+                if len(_tuple) != 5:
+                    raise ParseException("line: " + line + " should be splittable")
             address = int(_tuple[0], 16)
             methodName = _tuple[1].replace('/', '.') + '.' + _tuple[2]
             self.m_methodInfo[address] = methodName
@@ -190,8 +201,12 @@ class Parser(object):
             _buffer = self.m_inputFile.read(2 + 4 + 4 + 4)
             if not _buffer:
                 return
+            # TODO: need check clock source type
             readBytes += 2 + 4 + 4 + 4
-            _tuple = _struct.unpack(_buffer)
+            try:
+                _tuple = _struct.unpack(_buffer)
+            except:
+                break
             tid = _tuple[0]
             methodAndAction = _tuple[1]
             threadTime = _tuple[2]
@@ -199,6 +214,9 @@ class Parser(object):
 
             methodAddress  = methodAndAction & methodMask
             action = methodAndAction & actionMask
+            methodId = int(methodAddress)
+            if not self.m_methodInfo.has_key(methodId):
+                self.m_methodInfo[methodId] = str(methodAddress)
             #print >>sys.stderr, "tid: {0}, methodName: {1}, action: {2}, threadTime: {3}, wallTime: {4}".format(tid, self.getMethodName(methodAddress), action, threadTime, wallTime)
             self.m_recorder.record(tid, methodAddress, action, threadTime, wallTime)
 
