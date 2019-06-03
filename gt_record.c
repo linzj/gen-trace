@@ -20,19 +20,22 @@ void
 gt_ctrace_struct_submit (struct CTraceStruct *c, struct ThreadInfo *tinfo)
 {
   HChar buf[256];
+  const HChar *fnname;
   struct Record *r;
   if (c->end_time_ - c->start_time_ <= s_min_interval)
     return;
 
-  buf[0] = 0;
-  VG_ (get_fnname)(c->last_, buf, 256);
-  if (buf[0] == 0)
-    gt_overwrite_empty_fnname (buf, c->last_);
+  if (!VG_ (get_fnname) (c->last_, &fnname))
+    {
+      buf[0] = 0;
+      gt_overwrite_empty_fnname (buf, c->last_);
+      fnname = buf;
+    }
   r = VG_ (malloc)("gentrace.record", sizeof (struct Record));
   r->pid_ = tinfo->pid_;
   r->tid_ = tinfo->tid_;
   r->start_time_ = c->start_time_;
-  r->name_ = gt_find_string (buf);
+  r->name_ = gt_find_string (fnname);
   if (c->end_time_ > c->start_time_)
     r->dur_ = c->end_time_ - c->start_time_;
   else

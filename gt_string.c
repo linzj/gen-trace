@@ -31,10 +31,10 @@ lookup_func (const void *node1, const void *node2)
 {
   const struct MyLookupNode *lookup = node1;
   const struct MyNode *node = node2;
-  return VG_ (strcmp)(lookup->str, (char *)node->str);
+  return VG_ (strcmp) (lookup->str, node->str);
 }
 
-static VgHashTable s_string_hash_table;
+static VgHashTable *s_string_hash_table;
 
 static HChar *
 new_string (const HChar *str, Word key)

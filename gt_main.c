@@ -196,9 +196,10 @@ add_host_function_helper_3 (IRSB *sbOut, const char *str, void *func,
 }
 
 static IRSB *
-gt_instrument (VgCallbackClosure *closure, IRSB *sbIn, VexGuestLayout *layout,
-               VexGuestExtents *vge, VexArchInfo *archinfo_host,
-               IRType gWordTy, IRType hWordTy)
+gt_instrument (VgCallbackClosure *closure, IRSB *sbIn,
+               const VexGuestLayout *layout, const VexGuestExtents *vge,
+               const VexArchInfo *archinfo_host, IRType gWordTy,
+               IRType hWordTy)
 {
   IRSB *sbOut;
   int i = 0;
@@ -268,13 +269,17 @@ gt_instrument (VgCallbackClosure *closure, IRSB *sbIn, VexGuestLayout *layout,
       if (False)
         {
           HChar buf[256];
-          buf[0] = 0;
-          VG_ (get_fnname)(cia, buf, 256);
+          const HChar *fnname;
+          VG_ (get_fnname) (cia, &fnname);
           if (buf[0] == 0)
-            gt_overwrite_empty_fnname (buf, cia);
+            {
+              buf[0] = 0;
+              gt_overwrite_empty_fnname (buf, cia);
+              fnname = buf;
+            }
           // if (VG_ (strstr)(buf, "memory_move_cost") == buf)
           {
-            VG_ (printf)("   pass  %s ", buf);
+            VG_ (printf) ("   pass  %s ", fnname);
             ppIRStmt (st);
             VG_ (printf)(" sbIn->jumpkind = %x, %p\n", sbIn->jumpkind, sbIn);
           }

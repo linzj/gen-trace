@@ -21,17 +21,15 @@ gt_thread_stack_control_push (struct ThreadInfo *info, HWord addr)
     }
   else
     {
-      HChar buf[256];
-      buf[0] = '\0';
+      const HChar *fnname;
 
-      VG_ (get_fnname)(addr, buf, 256);
-      if (buf[0] != '\0')
+      if (VG_ (get_fnname) (addr, &fnname))
         {
           int i;
           for (i = 0; i < s_num_of_match_patterns; ++i)
             {
               HChar *str = s_match_patterns[i];
-              if (VG_ (strstr)(buf, str))
+              if (VG_ (strstr) (fnname, str))
                 {
                   // match
                   s_match_enable = True;
